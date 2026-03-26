@@ -102,15 +102,61 @@ def cmd_console(args):
     console.run()
 
 
+def show_menu():
+    banner = """
+ +------------------------------------------------------------+
+ |                                                            |
+ |   BBBBB    L      OOOOO   CCCCC  KKKK   KKKK  CCCCCC  HHHH  |
+ |   BB  BB   L      OO  OO  CC      KK K  KK KK  CC       HHHH |
+ |   BBBBBB   L      OO  OO  CC      KKKK   KKKK  CC       HHHH |
+ |   BB  BB   L      OO  OO  CC      KK KK  KK KK  CC       HHHH |
+ |   BBBBB    LLLLL   OOOO   CCCCC  KK  K  KK  K  CCCCC  HHHH |
+ |                                                            |
+ |   P     Y     TTTTT  H     H  OOO   N    N                 |
+ |   P     Y       T    H     H  O  O  NN   N                 |
+ |   PPPPPPY       T    HHHHHHH  O  O  N N  N                 |
+ |   P     Y       T    H     H  OOOO  N  N N                 |
+ |                                                            |
+ +------------------------------------------------------------+
+"""
+    print(colored(banner, "cyan"))
+    print(colored("  Welcome to Blockchain Python v1.0!\n", "yellow", bold=True))
+    
+    print("  Choose an option:\n")
+    print(f"  {colored('[1]', 'cyan')}  {colored('Web UI', 'green')}     - Start the web interface (recommended)")
+    print(f"  {colored('[2]', 'cyan')}  {colored('Console', 'green')}    - Start interactive CLI")
+    print(f"  {colored('[3]', 'cyan')}  {colored('Help', 'green')}       - Show all commands")
+    print(f"  {colored('[Q]', 'red')}   {colored('Quit', 'red')}       - Exit\n")
+    
+    while True:
+        choice = input(colored("  > ", "yellow")).strip().lower()
+        
+        if choice == '1':
+            print()
+            args = argparse.Namespace(port=5001, node_port=3009)
+            cmd_start(args)
+            break
+        elif choice == '2':
+            print()
+            cmd_console(None)
+            break
+        elif choice == '3':
+            parser = create_parser()
+            parser.print_help()
+            print()
+        elif choice in ('q', 'quit', 'exit'):
+            print(colored("\nGoodbye! Keep on blockchainin'!\n", "yellow"))
+            break
+        else:
+            print(colored("  Invalid choice. Please enter 1, 2, 3, or Q.\n", "red"))
+
+
 def main():
     parser = create_parser()
     args = parser.parse_args()
     
     if args.command is None:
-        print(colored("Blockchain Python v1.0\n", "cyan", bold=True))
-        print("Starting interactive console...\n")
-        console = Console()
-        console.run()
+        show_menu()
         return
     
     if hasattr(args, 'func'):

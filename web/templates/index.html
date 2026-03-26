@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,16 +17,26 @@
                 <a class="nav-item" data-page="send" onclick="navigate('send')">
                     <span class="nav-icon">&#128179;</span> Send
                 </a>
+                <a class="nav-item" data-page="mine" onclick="navigate('mine')">
+                    <span class="nav-icon">&#128992;</span> Mining
+                </a>
                 <a class="nav-item" data-page="history" onclick="navigate('history')">
                     <span class="nav-icon">&#128203;</span> History
                 </a>
                 <a class="nav-item" data-page="explorer" onclick="navigate('explorer')">
                     <span class="nav-icon">&#128269;</span> Explorer
                 </a>
+                <a class="nav-item" data-page="node" onclick="navigate('node')">
+                    <span class="nav-icon">&#128421;</span> Network
+                </a>
                 <a class="nav-item" data-page="wallet" onclick="navigate('wallet')">
                     <span class="nav-icon">&#128273;</span> Wallet
                 </a>
             </div>
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <span class="icon" id="themeIcon">&#127769;</span>
+                <span id="themeText">Light Mode</span>
+            </button>
         </nav>
         
         <main class="main-content scrollbar" id="mainContent">
@@ -34,59 +44,141 @@
         </main>
     </div>
 
+    <div class="toast-container" id="toastContainer"></div>
+
     <script>
         let currentPage = 'dashboard';
         let currentAccount = null;
+        let refreshInterval = null;
+        let miningInterval = null;
 
+        // Theme management
+        function initTheme() {
+            const saved = localStorage.getItem('theme') || 'dark';
+            setTheme(saved);
+        }
+
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            const icon = document.getElementById('themeIcon');
+            const text = document.getElementById('themeText');
+            if (theme === 'dark') {
+                icon.innerHTML = '&#127769;';
+                text.textContent = 'Light Mode';
+            } else {
+                icon.innerHTML = '&#9728;';
+                text.textContent = 'Dark Mode';
+            }
+        }
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme') || 'dark';
+            setTheme(current === 'dark' ? 'light' : 'dark');
+        }
+
+        // Toast notifications
+        function showToast(message, type = 'info', duration = 4000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icons = {
+                success: '&#10004;',
+                error: '&#10006;',
+                warning: '&#9888;',
+                info: '&#8505;'
+            };
+            
+            toast.innerHTML = `
+                <span class="toast-icon">${icons[type] || icons.info}</span>
+                <span class="toast-message">${message}</span>
+                <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+            `;
+            
+            container.appendChild(toast);
+            
+            if (duration > 0) {
+                setTimeout(() => {
+                    toast.classList.add('hiding');
+                    setTimeout(() => toast.remove(), 300);
+                }, duration);
+            }
+        }
+
+        // API helper
         async function api(endpoint, options = {}) {
             try {
                 const response = await fetch(`/api${endpoint}`, options);
                 return await response.json();
             } catch (error) {
                 console.error('API Error:', error);
+                showToast('Connection error', 'error');
                 return { error: error.message };
             }
         }
 
+        // Navigation
         function navigate(page) {
+            if (currentPage === page) return;
+            
             currentPage = page;
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.classList.toggle('active', item.dataset.page === page);
             });
+            
             loadPage(page);
         }
 
         async function loadPage(page) {
             const main = document.getElementById('mainContent');
+            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            clearIntervals();
             
-            switch(page) {
-                case 'dashboard':
-                    await loadDashboard(main);
-                    break;
-                case 'send':
-                    await loadSend(main);
-                    break;
-                case 'history':
-                    await loadHistory(main);
-                    break;
-                case 'explorer':
-                    await loadExplorer(main);
-                    break;
-                case 'wallet':
-                    await loadWallet(main);
-                    break;
-                default:
-                    main.innerHTML = '<div class="empty-state">Page not found</div>';
+            try {
+                switch(page) {
+                    case 'dashboard':
+                        await loadDashboard(main);
+                        break;
+                    case 'send':
+                        await loadSend(main);
+                        break;
+                    case 'mine':
+                        await loadMine(main);
+                        break;
+                    case 'history':
+                        await loadHistory(main);
+                        break;
+                    case 'explorer':
+                        await loadExplorer(main);
+                        break;
+                    case 'node':
+                        await loadNode(main);
+                        break;
+                    case 'wallet':
+                        await loadWallet(main);
+                        break;
+                    default:
+                        main.innerHTML = '<div class="empty-state animate-slide-up">Page not found</div>';
+                }
+            } catch (e) {
+                console.error('Page load error:', e);
+                main.innerHTML = `<div class="alert alert-error">Error loading page: ${e.message}</div>`;
             }
         }
 
+        function clearIntervals() {
+            if (refreshInterval) clearInterval(refreshInterval);
+            if (miningInterval) clearInterval(miningInterval);
+        }
+
+        // Dashboard
         async function loadDashboard(main) {
-            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-            
-            const [accountRes, chainRes, balanceRes] = await Promise.all([
+            const [accountRes, chainRes, balanceRes, miningRes] = await Promise.all([
                 api('/wallet/account'),
                 api('/chain/status'),
-                api('/wallet/balance')
+                api('/wallet/balance'),
+                api('/mine/status')
             ]);
             
             currentAccount = accountRes.account;
@@ -96,48 +188,61 @@
             main.innerHTML = `
                 <div class="header">
                     <h1 class="page-title">Dashboard</h1>
+                    <div class="live-indicator">
+                        <span class="live-dot"></span>
+                        Live
+                    </div>
                 </div>
                 
                 <div class="balance-card">
                     <div class="balance-label">Your Balance</div>
-                    <div class="balance-amount">${balance}</div>
+                    <div class="balance-amount" data-count="${balance}">${balance}</div>
                     <div class="balance-address">${address ? address.substring(0, 20) + '...' : 'No wallet'}</div>
                 </div>
                 
                 <div class="stats-grid">
-                    <div class="stat-card">
+                    <div class="stat-card animate-slide-up stagger-1">
                         <div class="stat-label">Blocks</div>
                         <div class="stat-value">${chainRes.block_count || 0}</div>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card animate-slide-up stagger-2">
                         <div class="stat-label">Total Fees</div>
                         <div class="stat-value">${chainRes.total_fees || 0}</div>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card animate-slide-up stagger-3">
                         <div class="stat-label">Last Block</div>
                         <div class="stat-value">#${chainRes.last_block?.index || 0}</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-label">Difficulty</div>
-                        <div class="stat-value">${chainRes.last_block?.difficulty || 5}</div>
+                    <div class="stat-card animate-slide-up stagger-4">
+                        <div class="stat-label">Mining</div>
+                        <div class="stat-value ${miningRes.is_mining ? 'text-success' : ''}">${miningRes.is_mining ? 'Active' : 'Stopped'}</div>
                     </div>
                 </div>
                 
-                <div class="card">
+                <div class="card animate-slide-up stagger-5">
                     <h3 class="section-title">Quick Actions</h3>
-                    <div style="display: flex; gap: 12px;">
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                         <button class="btn btn-primary" onclick="navigate('send')">Send Coins</button>
+                        <button class="btn btn-success" onclick="navigate('mine')">Start Mining</button>
                         <button class="btn btn-secondary" onclick="loadDashboard(document.getElementById('mainContent'));">Refresh</button>
                     </div>
                 </div>
                 
-                <div class="card">
+                <div class="card animate-slide-up stagger-5">
                     <h3 class="section-title">Recent Blocks</h3>
                     <div id="recentBlocks"></div>
                 </div>
             `;
             
             loadRecentBlocks();
+            refreshInterval = setInterval(async () => {
+                const res = await api('/chain/status');
+                if (!res.error) {
+                    document.querySelector('.stat-card:nth-child(1) .stat-value').textContent = res.block_count || 0;
+                    document.querySelector('.stat-card:nth-child(2) .stat-value').textContent = res.total_fees || 0;
+                    document.querySelector('.stat-card:nth-child(3) .stat-value').textContent = '#' + (res.last_block?.index || 0);
+                }
+            }, 5000);
         }
 
         async function loadRecentBlocks() {
@@ -148,10 +253,10 @@
             
             if (res.blocks && res.blocks.length > 0) {
                 container.innerHTML = res.blocks.map(block => `
-                    <div class="block-card" onclick="viewBlock(${block.index})">
+                    <div class="block-card animate-slide-in-right" onclick="viewBlock(${block.index})">
                         <div style="display: flex; justify-content: space-between;">
                             <strong>Block #${block.index}</strong>
-                            <span class="block-hash">${block.hash}</span>
+                            <span class="block-hash">${block.hash.substring(0, 15)}...</span>
                         </div>
                         <div style="margin-top: 8px; color: var(--text-secondary); font-size: 0.85rem;">
                             TX: ${block.tx_count} | Difficulty: ${block.difficulty} | Fees: ${block.fees}
@@ -165,14 +270,9 @@
 
         async function viewBlock(index) {
             const main = document.getElementById('mainContent');
-            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            main.style.opacity = '0';
             
             const res = await api(`/chain/block/${index}`);
-            
-            if (res.error) {
-                main.innerHTML = `<div class="alert alert-error">${res.error}</div>`;
-                return;
-            }
             
             main.innerHTML = `
                 <div class="header">
@@ -180,7 +280,7 @@
                     <button class="btn btn-secondary" onclick="navigate('explorer')">Back</button>
                 </div>
                 
-                <div class="card">
+                <div class="card animate-slide-up">
                     <h3 class="section-title">Block Details</h3>
                     <div style="display: grid; gap: 12px;">
                         <div><strong>Hash:</strong> <span class="block-hash">${res.hash}</span></div>
@@ -193,7 +293,7 @@
                     </div>
                 </div>
                 
-                <div class="card">
+                <div class="card animate-slide-up">
                     <h3 class="section-title">Transactions (${res.tx_hashes?.length || 0})</h3>
                     ${res.tx_hashes?.map(tx => `
                         <div class="tx-item">
@@ -202,8 +302,119 @@
                     `).join('') || '<div class="empty-state">No transactions</div>'}
                 </div>
             `;
+            
+            main.style.opacity = '1';
         }
 
+        // Mining Page
+        async function loadMine(main) {
+            const [miningRes, chainRes, balanceRes] = await Promise.all([
+                api('/mine/status'),
+                api('/chain/status'),
+                api('/wallet/balance')
+            ]);
+            
+            const isMining = miningRes.is_mining;
+            const blocksMined = miningRes.blocks_mined || 0;
+            const earnings = miningRes.total_earnings || 0;
+            const currentBlock = miningRes.current_block_index || 0;
+            
+            main.innerHTML = `
+                <div class="header">
+                    <h1 class="page-title">Mining</h1>
+                </div>
+                
+                <div class="mining-status ${isMining ? 'active' : ''} animate-slide-up" id="miningStatus">
+                    <div class="mining-indicator ${isMining ? 'active' : ''}"></div>
+                    <div>
+                        <strong>${isMining ? 'Mining Active' : 'Mining Stopped'}</strong>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                            ${isMining ? 'Finding proof of work...' : 'Click start to begin mining'}
+                        </div>
+                    </div>
+                    <button class="btn ${isMining ? 'btn-danger' : 'btn-success'} btn-lg" id="miningBtn" onclick="toggleMining()">
+                        ${isMining ? '&#9632; Stop' : '&#9654; Start'}
+                    </button>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card animate-slide-up stagger-1">
+                        <div class="stat-label">Blocks Mined</div>
+                        <div class="stat-value" id="blocksMinedStat">${blocksMined}</div>
+                    </div>
+                    <div class="stat-card animate-slide-up stagger-2">
+                        <div class="stat-label">Total Earnings</div>
+                        <div class="stat-value" id="earningsStat">${earnings}</div>
+                    </div>
+                    <div class="stat-card animate-slide-up stagger-3">
+                        <div class="stat-label">Current Block</div>
+                        <div class="stat-value">#${currentBlock}</div>
+                    </div>
+                    <div class="stat-card animate-slide-up stagger-4">
+                        <div class="stat-label">Difficulty</div>
+                        <div class="stat-value">${chainRes.last_block?.difficulty || 5}</div>
+                    </div>
+                </div>
+                
+                <div class="card animate-slide-up stagger-5">
+                    <h3 class="section-title">Mining Info</h3>
+                    <div style="line-height: 1.8;">
+                        <p><span class="info-label">Block Reward:</span> <span class="info-value">2.5 coins + transaction fees</span></p>
+                        <p><span class="info-label">Proof of Work:</span> <span class="info-value">Find nonce where hash starts with ${'0'.repeat(chainRes.last_block?.difficulty || 5)}</span></p>
+                        <p><span class="info-label">Target Time:</span> <span class="info-value">~60 seconds per block</span></p>
+                        <p><span class="info-label">Min Fee:</span> <span class="info-value">0.0001 coins per transaction</span></p>
+                    </div>
+                </div>
+                
+                <div class="card animate-slide-up stagger-5" id="balanceCard">
+                    <h3 class="section-title">Your Balance</h3>
+                    <div style="font-size: 2rem; font-weight: bold; color: var(--accent);">
+                        ${balanceRes.balance || 0} coins
+                    </div>
+                </div>
+            `;
+            
+            if (isMining) {
+                startMiningRefresh();
+            }
+        }
+
+        async function toggleMining() {
+            const btn = document.getElementById('miningBtn');
+            const status = document.getElementById('miningStatus');
+            btn.disabled = true;
+            
+            const res = await api('/mine/status');
+            
+            if (res.is_mining) {
+                const stopRes = await api('/mine/stop', { method: 'POST' });
+                if (stopRes.success) {
+                    showToast(`Mining stopped. Earned ${stopRes.total_earnings} coins!`, 'success');
+                }
+            } else {
+                const startRes = await api('/mine/start', { method: 'POST' });
+                if (startRes.success) {
+                    showToast('Mining started!', 'success');
+                    startMiningRefresh();
+                }
+            }
+            
+            loadMine(document.getElementById('mainContent'));
+        }
+
+        function startMiningRefresh() {
+            miningInterval = setInterval(async () => {
+                const res = await api('/mine/status');
+                if (!res.error) {
+                    const blocksEl = document.getElementById('blocksMinedStat');
+                    const earningsEl = document.getElementById('earningsStat');
+                    if (blocksEl) blocksEl.textContent = res.blocks_mined || 0;
+                    if (earningsEl) earningsEl.textContent = res.total_earnings || 0;
+                }
+            }, 5000);
+        }
+
+        // Send Page
         async function loadSend(main) {
             if (!currentAccount) {
                 await loadWallet(main);
@@ -217,7 +428,7 @@
                     <h1 class="page-title">Send Coins</h1>
                 </div>
                 
-                <div class="card">
+                <div class="card animate-slide-up">
                     <div id="sendAlert"></div>
                     <form onsubmit="handleSend(event)">
                         <div class="form-group">
@@ -253,7 +464,7 @@
             const password = document.getElementById('sendPassword').value;
             
             btn.disabled = true;
-            btn.textContent = 'Sending...';
+            btn.innerHTML = '<span class="spinner spinner-sm"></span> Sending...';
             
             const res = await api('/wallet/send', {
                 method: 'POST',
@@ -268,17 +479,18 @@
                 </div>`;
                 document.getElementById('sendPassword').value = '';
                 document.getElementById('sendAmount').value = '';
+                showToast('Transaction sent successfully!', 'success');
             } else {
                 alert.innerHTML = `<div class="alert alert-error"><strong>Error:</strong> ${res.error}</div>`;
+                showToast(res.error || 'Transaction failed', 'error');
             }
             
             btn.disabled = false;
             btn.textContent = 'Send';
         }
 
+        // History Page
         async function loadHistory(main) {
-            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-            
             let txs = [];
             let address = null;
             
@@ -296,7 +508,7 @@
                     <button class="btn btn-secondary" onclick="loadHistory(document.getElementById('mainContent'))">Refresh</button>
                 </div>
                 
-                <div class="card">
+                <div class="card animate-slide-up">
                     ${txs.length > 0 ? `
                         <table class="table">
                             <thead>
@@ -313,7 +525,7 @@
                                     <tr>
                                         <td><span class="badge ${tx.direction === 'received' ? 'badge-success' : 'badge-warning'}">${tx.direction || 'sent'}</span></td>
                                         <td>${tx.amount}</td>
-                                        <td><span class="block-hash">${tx.hash}</span></td>
+                                        <td><span class="block-hash">${tx.hash.substring(0, 15)}...</span></td>
                                         <td><span class="badge ${tx.status === 'confirmed' ? 'badge-success' : 'badge-warning'}">${tx.status}</span></td>
                                         <td>${new Date(tx.timestamp * 1000).toLocaleString()}</td>
                                     </tr>
@@ -330,9 +542,8 @@
             `;
         }
 
+        // Explorer Page
         async function loadExplorer(main) {
-            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-            
             const res = await api('/chain/blocks?limit=20');
             
             main.innerHTML = `
@@ -341,7 +552,7 @@
                     <button class="btn btn-secondary" onclick="loadExplorer(document.getElementById('mainContent'))">Refresh</button>
                 </div>
                 
-                <div class="card">
+                <div class="card animate-slide-up">
                     <h3 class="section-title">Recent Blocks</h3>
                     ${res.blocks && res.blocks.length > 0 ? res.blocks.map(block => `
                         <div class="block-card" onclick="viewBlock(${block.index})">
@@ -363,9 +574,93 @@
             `;
         }
 
-        async function loadWallet(main) {
-            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+        // Network Page
+        async function loadNode(main) {
+            const [nodeRes, statsRes] = await Promise.all([
+                api('/node/status'),
+                api('/node/stats')
+            ]);
             
+            const nodes = nodeRes.nodes || [];
+            const aliveCount = nodeRes.alive_nodes || 0;
+            
+            main.innerHTML = `
+                <div class="header">
+                    <h1 class="page-title">Network</h1>
+                    <button class="btn btn-secondary" onclick="loadNode(document.getElementById('mainContent'))">Refresh</button>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card animate-slide-up stagger-1">
+                        <div class="stat-label">Total Nodes</div>
+                        <div class="stat-value">${nodeRes.node_count || 0}</div>
+                    </div>
+                    <div class="stat-card animate-slide-up stagger-2">
+                        <div class="stat-label">Online</div>
+                        <div class="stat-value text-success">${aliveCount}</div>
+                    </div>
+                    <div class="stat-card animate-slide-up stagger-3">
+                        <div class="stat-label">Offline</div>
+                        <div class="stat-value text-error">${(nodeRes.node_count || 0) - aliveCount}</div>
+                    </div>
+                    <div class="stat-card animate-slide-up stagger-4">
+                        <div class="stat-label">Known Blocks</div>
+                        <div class="stat-value">${statsRes.blocks || 0}</div>
+                    </div>
+                </div>
+                
+                <div class="card animate-slide-up">
+                    <h3 class="section-title">Add Peer</h3>
+                    <div style="display: flex; gap: 12px;">
+                        <input type="text" id="peerAddress" class="form-input" placeholder="http://host:port">
+                        <button class="btn btn-primary" onclick="addPeer()">Add</button>
+                    </div>
+                </div>
+                
+                <div class="card animate-slide-up">
+                    <h3 class="section-title">Connected Nodes</h3>
+                    ${nodes.length > 0 ? nodes.map(node => `
+                        <div class="node-card">
+                            <div class="node-status ${node.is_alive ? 'online' : 'offline'}"></div>
+                            <div class="node-info">
+                                <div class="node-address">${node.address}</div>
+                                <div class="node-last-seen">
+                                    ${node.is_alive ? 'Online' : 'Last seen: ' + (node.last_seen ? new Date(node.last_seen * 1000).toLocaleString() : 'Never')}
+                                </div>
+                            </div>
+                            <span class="badge ${node.is_alive ? 'badge-success' : 'badge-error'}">
+                                ${node.is_alive ? 'Online' : 'Offline'}
+                            </span>
+                        </div>
+                    `).join('') : '<div class="empty-state">No nodes connected</div>'}
+                </div>
+            `;
+        }
+
+        async function addPeer() {
+            const address = document.getElementById('peerAddress').value.trim();
+            if (!address) {
+                showToast('Please enter a node address', 'warning');
+                return;
+            }
+            
+            const res = await api('/node/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address })
+            });
+            
+            if (res.success) {
+                showToast('Node added successfully', 'success');
+                document.getElementById('peerAddress').value = '';
+                loadNode(document.getElementById('mainContent'));
+            } else {
+                showToast(res.error || 'Failed to add node', 'error');
+            }
+        }
+
+        // Wallet Page
+        async function loadWallet(main) {
             const [accountsRes, balanceRes] = await Promise.all([
                 api('/wallet/accounts'),
                 api('/wallet/balance')
@@ -379,10 +674,10 @@
                     <h1 class="page-title">Wallet</h1>
                 </div>
                 
-                <div class="card">
+                <div class="card animate-slide-up">
                     <h3 class="section-title">Accounts</h3>
                     ${accounts.length > 0 ? accounts.map((acc, i) => `
-                        <div class="block-card" style="${acc.is_active ? 'border-color: var(--accent);' : ''}" onclick="selectAccount(${acc.id || i + 1})">
+                        <div class="block-card ${acc.is_active ? 'mining' : ''}" onclick="selectAccount(${acc.id || i + 1})">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div>
                                     <strong>Account ${acc.id || i + 1}</strong>
@@ -390,7 +685,7 @@
                                 </div>
                                 <div>
                                     ${acc.is_active ? '<span class="badge badge-success">Active</span>' : ''}
-                                    ${acc.has_password ? '<span class="badge badge-success" style="margin-left: 8px;">Locked</span>' : '<span class="badge badge-warning" style="margin-left: 8px;">No Password</span>'}
+                                    ${acc.has_password ? '<span class="badge badge-info" style="margin-left: 8px;">Encrypted</span>' : '<span class="badge badge-warning" style="margin-left: 8px;">No Password</span>'}
                                 </div>
                             </div>
                         </div>
@@ -403,7 +698,7 @@
                 
                 <div id="walletAlert"></div>
                 
-                <div class="card">
+                <div class="card animate-slide-up">
                     <h3 class="section-title">Current Balance</h3>
                     <div style="font-size: 2rem; font-weight: bold; color: var(--accent);">
                         ${balanceRes.balance || 0} coins
@@ -412,6 +707,7 @@
                         <div class="block-hash" style="margin-top: 12px;">
                             ${currentAccount.address}
                         </div>
+                        <button class="btn btn-secondary mt-4" onclick="copyAddress()">Copy Address</button>
                     ` : ''}
                 </div>
             `;
@@ -420,6 +716,7 @@
         async function selectAccount(index) {
             const res = await api(`/wallet/login/${index}`, { method: 'POST' });
             if (res.success) {
+                showToast('Account switched', 'success');
                 loadWallet(document.getElementById('mainContent'));
             }
         }
@@ -452,7 +749,7 @@
             const confirm = document.getElementById('newWalletPasswordConfirm').value;
             
             if (password !== confirm) {
-                alert('Passwords do not match!');
+                showToast('Passwords do not match', 'error');
                 return;
             }
             
@@ -469,13 +766,24 @@
                     Address: ${res.address}<br>
                     Remember your password!
                 </div>`;
+                showToast('Wallet created successfully!', 'success');
                 loadWallet(document.getElementById('mainContent'));
             } else {
                 alert.innerHTML = `<div class="alert alert-error">Error: ${res.error}</div>`;
+                showToast('Failed to create wallet', 'error');
             }
         }
 
+        function copyAddress() {
+            if (currentAccount) {
+                navigator.clipboard.writeText(currentAccount.address);
+                showToast('Address copied to clipboard', 'success');
+            }
+        }
+
+        // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
             loadPage('dashboard');
         });
     </script>

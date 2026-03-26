@@ -11,7 +11,7 @@ from blockchain.exceptions import (
 )
 from lib.common import is_valid_address, sign_data, verify_signature, verify_pubkey_address, hash160
 
-MIN_FEE = 1
+MIN_FEE = 0.0001
 
 
 class Vin(Model):
@@ -199,8 +199,8 @@ class Transaction():
         if from_addr == to_addr:
             raise InvalidAddressError("Cannot send to same address")
         
-        if not isinstance(amount, int):
-            amount = int(amount)
+        if not isinstance(amount, (int, float)):
+            amount = float(amount)
         
         if amount <= 0:
             raise AmountError("Amount must be positive")

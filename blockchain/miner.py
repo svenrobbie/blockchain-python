@@ -8,7 +8,7 @@ from lib.common import unlock_sig, lock_sig, sign_data, hash160
 from blockchain.exceptions import WalletLockedError, ValidationError
 
 MAX_COIN = 21000000
-REWARD = 20
+REWARD = 2.5
 
 
 def calculate_total_fees(transactions):

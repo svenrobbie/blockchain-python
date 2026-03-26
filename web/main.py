@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
-from api import wallet, chain, node, auth
+from api import wallet, chain, node, auth, mine
 
 app = FastAPI(
     title="Blockchain Python Web UI",
@@ -33,6 +33,7 @@ app.include_router(wallet.router)
 app.include_router(chain.router)
 app.include_router(node.router)
 app.include_router(auth.router)
+app.include_router(mine.router)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -67,6 +68,18 @@ async def explorer_page():
 
 @app.get("/wallet", response_class=HTMLResponse)
 async def wallet_page():
+    with open(os.path.join(web_dir, "templates", "index.html"), "r") as f:
+        return f.read()
+
+
+@app.get("/mine", response_class=HTMLResponse)
+async def mine_page():
+    with open(os.path.join(web_dir, "templates", "index.html"), "r") as f:
+        return f.read()
+
+
+@app.get("/node", response_class=HTMLResponse)
+async def node_page():
     with open(os.path.join(web_dir, "templates", "index.html"), "r") as f:
         return f.read()
 
