@@ -3,7 +3,7 @@ import hashlib
 import lib.common
 from model import Model
 from lib.common import pubkey_to_address
-from database import AccountDB
+from database_sqlite import AccountDB
 
 def new_account():
     private_key = lib.common.random_key()

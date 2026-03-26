@@ -1,7 +1,7 @@
 # coding:utf-8
 import multiprocessing
 import rpc
-from database import NodeDB, TransactionDB, BlockChainDB
+from database_sqlite import NodeDB, TransactionDB, BlockChainDB
 from lib.common import cprint
 
 def start_node(hostport='0.0.0.0:3009'):

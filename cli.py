@@ -8,7 +8,7 @@ import node
 import miner
 import account as account_module
 import transaction
-import database
+import database_sqlite
 import block as block_module
 
 
@@ -123,11 +123,11 @@ class BlockchainCLI:
         print("\033[2J\033[H", end="")
 
     def cmd_status(self, args):
-        bcdb = database.BlockChainDB()
+        bcdb = database_sqlite.BlockChainDB()
         chain = bcdb.find_all()
-        txdb = database.TransactionDB()
+        txdb = database_sqlite.TransactionDB()
         transactions = txdb.find_all()
-        untxdb = database.UnTransactionDB()
+        untxdb = database_sqlite.UnTransactionDB()
         pending = untxdb.find_all()
 
         account = account_module.get_account()
@@ -287,7 +287,7 @@ class BlockchainCLI:
         print(f"Balance: {colored(str(balance), 'green', bold=True)} coins")
 
     def wallet_list(self):
-        adb = database.AccountDB()
+        adb = database_sqlite.AccountDB()
         accounts = adb.find_all()
         print(colored("\n=== All Accounts ===", "cyan", bold=True))
         if accounts:
@@ -367,7 +367,7 @@ class BlockchainCLI:
             print(colored(f"Transaction failed: {e}", "red"))
 
     def tx_pending(self):
-        untxdb = database.UnTransactionDB()
+        untxdb = database_sqlite.UnTransactionDB()
         pending = untxdb.find_all()
         print(colored("\n=== Pending Transactions ===", "cyan", bold=True))
         if pending:
@@ -380,8 +380,8 @@ class BlockchainCLI:
             print(colored("No pending transactions", "yellow"))
 
     def tx_view(self, tx_hash):
-        txdb = database.TransactionDB()
-        untxdb = database.UnTransactionDB()
+        txdb = database_sqlite.TransactionDB()
+        untxdb = database_sqlite.UnTransactionDB()
 
         all_txs = txdb.find_all() + untxdb.find_all()
 
@@ -424,7 +424,7 @@ class BlockchainCLI:
             print(colored(f"Unknown chain command: {subcmd}", "red"))
 
     def chain_status(self):
-        bcdb = database.BlockChainDB()
+        bcdb = database_sqlite.BlockChainDB()
         chain = bcdb.find_all()
 
         print(colored("\n=== Chain Status ===", "cyan", bold=True))
@@ -444,7 +444,7 @@ class BlockchainCLI:
             print(f"Hash: {colored(last.get('hash', 'N/A')[:20] + '...', 'white')}")
 
     def chain_view(self, index):
-        bcdb = database.BlockChainDB()
+        bcdb = database_sqlite.BlockChainDB()
         chain = bcdb.find_all()
 
         if index == -1:
@@ -466,7 +466,7 @@ class BlockchainCLI:
             print(f"  {i+1}. {tx_hash[:40]}...")
 
     def chain_info(self):
-        bcdb = database.BlockChainDB()
+        bcdb = database_sqlite.BlockChainDB()
         chain = bcdb.find_all()
 
         if not chain:
@@ -490,7 +490,7 @@ class BlockchainCLI:
             print(f"Last 10 avg time:  {sum(recent_diffs) // len(recent_diffs)}s")
 
     def chain_verify(self):
-        bcdb = database.BlockChainDB()
+        bcdb = database_sqlite.BlockChainDB()
         chain = bcdb.find_all()
 
         print(colored("\n=== Verifying Chain ===", "cyan", bold=True))
