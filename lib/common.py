@@ -269,7 +269,25 @@ def is_valid_address(address):
         return False
 
 
-def verify_signature(data, signature, pubkey):
-    expected_sig = lock_sig(unlock_sig(signature.split(':')[0] if ':' in signature else signature, pubkey), pubkey)
-    actual_sig = signature.split(':')[1] if ':' in signature else signature
-    return expected_sig == actual_sig
+def pubkey_to_address_check(pubkey_hex):
+    if isinstance(pubkey_hex, str):
+        pubkey_bytes = binascii.unhexlify(pubkey_hex)
+    else:
+        pubkey_bytes = pubkey_hex
+    hash160_bytes = bin_hash160(pubkey_bytes)
+    return bin_to_b58check(hash160_bytes, 0)
+
+
+def sign_data(data, private_key):
+    key_hash = hash160(private_key.encode())
+    return unlock_sig(key_hash, data)
+
+
+def verify_signature(data, signature, key_hash):
+    expected_sig = unlock_sig(key_hash, data)
+    return expected_sig == signature
+
+
+def verify_pubkey_address(pubkey_hex, address):
+    derived_address = pubkey_to_address_check(pubkey_hex)
+    return derived_address == address

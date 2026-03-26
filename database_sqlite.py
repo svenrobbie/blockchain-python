@@ -4,7 +4,8 @@ import json
 import os
 import time
 
-DATABASE_PATH = 'data/blockchain.db'
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+DATABASE_PATH = os.path.join(_script_dir, 'data', 'blockchain_v2.db')
 
 
 class SQLiteDB:
@@ -13,7 +14,8 @@ class SQLiteDB:
     @classmethod
     def get_conn(cls):
         if cls._connection is None:
-            os.makedirs('data', exist_ok=True)
+            db_dir = os.path.dirname(DATABASE_PATH)
+            os.makedirs(db_dir, exist_ok=True)
             cls._connection = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
             cls._connection.row_factory = sqlite3.Row
         return cls._connection
@@ -79,7 +81,8 @@ class SQLiteDB:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 address TEXT UNIQUE NOT NULL,
                 pubkey TEXT,
-                is_active INTEGER DEFAULT 0
+                is_active INTEGER DEFAULT 0,
+                encrypted_key TEXT
             )
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_account_address ON accounts(address)')
@@ -88,6 +91,8 @@ class SQLiteDB:
         columns = [col[1] for col in cursor.fetchall()]
         if 'is_active' not in columns:
             cursor.execute('ALTER TABLE accounts ADD COLUMN is_active INTEGER DEFAULT 0')
+        if 'encrypted_key' not in columns:
+            cursor.execute('ALTER TABLE accounts ADD COLUMN encrypted_key TEXT')
 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS nodes (
@@ -358,18 +363,24 @@ class AccountDB:
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM accounts ORDER BY id')
         rows = cursor.fetchall()
-        return [{'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 'is_active': row['is_active']} for row in rows]
+        return [{'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 
+                 'is_active': row['is_active'], 
+                 'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None} for row in rows]
 
     def find_one(self):
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM accounts WHERE is_active = 1 LIMIT 1')
         row = cursor.fetchone()
         if row:
-            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 'is_active': row['is_active']}
+            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 
+                    'is_active': row['is_active'], 
+                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None}
         cursor.execute('SELECT * FROM accounts ORDER BY id LIMIT 1')
         row = cursor.fetchone()
         if row:
-            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 'is_active': row['is_active']}
+            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 
+                    'is_active': row['is_active'], 
+                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None}
         return None
 
     def find_by_index(self, index):
@@ -377,7 +388,9 @@ class AccountDB:
         cursor.execute('SELECT * FROM accounts ORDER BY id LIMIT 1 OFFSET ?', (index - 1,))
         row = cursor.fetchone()
         if row:
-            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 'is_active': row['is_active']}
+            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 
+                    'is_active': row['is_active'], 
+                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None}
         return None
 
     def find_by_address(self, address):
@@ -385,7 +398,9 @@ class AccountDB:
         cursor.execute('SELECT * FROM accounts WHERE address = ?', (address,))
         row = cursor.fetchone()
         if row:
-            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 'is_active': row['is_active']}
+            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 
+                    'is_active': row['is_active'], 
+                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None}
         return None
 
     def set_active(self, account_id):
@@ -399,18 +414,24 @@ class AccountDB:
         cursor.execute('UPDATE accounts SET is_active = 0')
         self.conn.commit()
 
+    def update_encrypted_key(self, account_id, encrypted_key):
+        cursor = self.conn.cursor()
+        cursor.execute('UPDATE accounts SET encrypted_key = ? WHERE id = ?', (encrypted_key, account_id))
+        self.conn.commit()
+
     def insert(self, account):
         cursor = self.conn.cursor()
         cursor.execute('SELECT COUNT(*) FROM accounts')
         count = cursor.fetchone()[0]
         is_active = 1 if count == 0 else 0
         cursor.execute('''
-            INSERT OR IGNORE INTO accounts (address, pubkey, is_active)
-            VALUES (?, ?, ?)
+            INSERT OR IGNORE INTO accounts (address, pubkey, is_active, encrypted_key)
+            VALUES (?, ?, ?, ?)
         ''', (
             account['address'],
             account.get('pubkey', ''),
-            is_active
+            is_active,
+            account.get('encrypted_key', '')
         ))
         self.conn.commit()
 
@@ -424,12 +445,13 @@ class AccountDB:
         cursor.execute('DELETE FROM accounts')
         for acc in accounts:
             cursor.execute('''
-                INSERT INTO accounts (address, pubkey, is_active)
-                VALUES (?, ?, ?)
+                INSERT INTO accounts (address, pubkey, is_active, encrypted_key)
+                VALUES (?, ?, ?, ?)
             ''', (
                 acc['address'],
                 acc.get('pubkey', ''),
-                acc.get('is_active', 0)
+                acc.get('is_active', 0),
+                acc.get('encrypted_key', '')
             ))
         self.conn.commit()
 

@@ -4,9 +4,47 @@ import time
 import rpc
 from database_sqlite import NodeDB, TransactionDB, BlockChainDB
 from lib.common import cprint
+from block import Block
+from transaction import validate_transaction
 
 discovery_instance = None
 health_instance = None
+
+
+def validate_chain(chain, on_progress=None):
+    if not chain:
+        return True, ""
+    
+    for i, block in enumerate(chain):
+        if on_progress:
+            on_progress(i, len(chain))
+        
+        previous_block = chain[i - 1] if i > 0 else None
+        valid, error = Block.validate(block, previous_block)
+        if not valid:
+            return False, f"Block {i}: {error}"
+        
+        for tx_hash in block.get('tx', []):
+            if tx_hash == chain[0].get('tx', [None])[0] and i == 0:
+                continue
+            
+            tx = _find_transaction(tx_hash, chain)
+            if tx:
+                try:
+                    validate_transaction(tx, require_signature=False)
+                except Exception as e:
+                    return False, f"Block {i}, TX {tx_hash[:20]}...: {e}"
+    
+    return True, ""
+
+
+def _find_transaction(tx_hash, chain):
+    txdb = TransactionDB()
+    all_txs = txdb.find_all()
+    for tx in all_txs:
+        if tx['hash'] == tx_hash:
+            return tx
+    return None
 
 
 def start_node(hostport='0.0.0.0:3009'):
@@ -64,10 +102,10 @@ def stop_node():
     cprint('INFO', 'Node services stopped')
 
 
-def init_node():
+def init_node(on_progress=None):
     """
     Download blockchain from node compare with local database and select the longest blockchain.
-    Only syncs with alive nodes.
+    Only syncs with alive nodes. Validates incoming chain before accepting.
     """
     ndb = NodeDB()
     alive_nodes = ndb.find_alive()
@@ -94,9 +132,25 @@ def init_node():
     
     for bc in all_node_blockchains:
         if len(bc) > len(blockchain):
-            bcdb.clear()
-            bcdb.write(bc)
-            blockchain = bc
+            cprint('INFO', f'Validating incoming chain ({len(bc)} blocks)...')
+            
+            def progress_callback(current, total):
+                if on_progress:
+                    on_progress(current, total)
+                else:
+                    pct = int(100 * current / total) if total > 0 else 100
+                    cprint('INFO', f'  Validating block {current + 1}/{total} ({pct}%)')
+            
+            valid, error = validate_chain(bc, progress_callback)
+            
+            if valid:
+                cprint('INFO', 'Chain validation passed. Replacing local chain...')
+                bcdb.clear()
+                bcdb.write(bc)
+                blockchain = bc
+            else:
+                cprint('ERROR', f'Chain validation failed: {error}')
+                cprint('ERROR', 'Rejecting invalid chain from node')
     
     for txs in all_node_txs:
         if len(txs) > len(transactions):

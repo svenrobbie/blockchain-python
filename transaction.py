@@ -7,11 +7,11 @@ from database_sqlite import TransactionDB, UnTransactionDB
 from rpc import BroadCast
 from exceptions import (
     DoubleSpendError, InvalidAddressError, InsufficientFundsError,
-    AmountError, UTXONotFoundError
+    AmountError, UTXONotFoundError, SignatureError, WalletLockedError
 )
-from lib.common import is_valid_address
+from lib.common import is_valid_address, sign_data, verify_signature, verify_pubkey_address, hash160
 
-MIN_FEE = 1  # Mandatory minimum fee per transaction
+MIN_FEE = 1
 
 
 class Vin(Model):
@@ -43,9 +43,10 @@ class Vout(Model):
         has_spend_hash = [vin['hash'] for vin in spend_vin]
         
         pending_tx = UnTransactionDB().find_all()
+        pending_spend_hash = []
         for item in pending_tx:
-            [spend_vin.extend(item['vin']) for item in pending_tx]
-        pending_spend_hash = [vin['hash'] for vin in spend_vin]
+            for vin_item in item.get('vin', []):
+                pending_spend_hash.append(vin_item['hash'])
         
         for item in all_tx:
             for vout in item['vout']:
@@ -86,18 +87,18 @@ def check_utxo_exists(vin_list):
             raise UTXONotFoundError(f"UTXO not found: {vin.hash[:20]}...")
 
 
-def validate_transaction_inputs(vin_list, from_addr):
+def validate_transaction_inputs(vin_list, from_addr, require_signature=True):
     for vin in vin_list:
         if vin.amount <= 0:
             raise AmountError("Input amount must be positive")
         
         all_tx = TransactionDB().find_all()
         utxo_found = False
+        utxo_receiver = None
         for tx in all_tx:
             for vout in tx['vout']:
                 if vout['hash'] == vin.hash:
-                    if vout['receiver'] != from_addr:
-                        raise DoubleSpendError("UTXO belongs to different address")
+                    utxo_receiver = vout['receiver']
                     utxo_found = True
                     break
             if utxo_found:
@@ -105,6 +106,16 @@ def validate_transaction_inputs(vin_list, from_addr):
         
         if not utxo_found:
             raise UTXONotFoundError(f"UTXO not found: {vin.hash[:20]}...")
+        
+        if utxo_receiver != from_addr:
+            raise DoubleSpendError("UTXO belongs to different address")
+        
+        if require_signature and (not vin.signature or not vin.pubkey):
+            raise SignatureError("Missing signature for input")
+        
+        if require_signature and vin.signature and vin.pubkey:
+            if not verify_pubkey_address(vin.pubkey, from_addr):
+                raise SignatureError("Public key does not match sender address")
 
 
 def validate_transaction_outputs(vout_list, total_input):
@@ -120,6 +131,53 @@ def validate_transaction_outputs(vout_list, total_input):
             raise AmountError("Output amount must be positive")
 
 
+def validate_transaction(tx, require_signature=True):
+    if tx.get('vout') is None:
+        raise SignatureError("Invalid transaction structure: missing vout")
+    
+    if tx.get('vin') is None:
+        raise SignatureError("Invalid transaction structure: missing vin")
+    
+    if tx.get('vin') is None:
+        raise SignatureError("Invalid transaction structure")
+    
+    all_tx = TransactionDB().find_all()
+    
+    for i, vin in enumerate(tx['vin']):
+        vin_hash = vin.get('hash')
+        signature = vin.get('signature')
+        pubkey = vin.get('pubkey')
+        
+        utxo_found = False
+        utxo_receiver = None
+        utxo_amount = None
+        for existing_tx in all_tx:
+            for vout in existing_tx.get('vout', []):
+                if vout['hash'] == vin_hash:
+                    utxo_receiver = vout['receiver']
+                    utxo_amount = vout['amount']
+                    utxo_found = True
+                    break
+            if utxo_found:
+                break
+        
+        if not utxo_found:
+            raise UTXONotFoundError(f"UTXO not found: {vin_hash[:20] if vin_hash else 'None'}...")
+        
+        if require_signature:
+            if not signature or not pubkey:
+                raise SignatureError(f"Missing signature for input {i}")
+            
+            key_hash = pubkey
+            
+            if not verify_pubkey_address(key_hash, utxo_receiver):
+                raise SignatureError(f"Key hash does not match UTXO owner for input {i}")
+            
+            data_to_sign = f"{vin_hash}:{utxo_amount}"
+            if not verify_signature(data_to_sign, signature, key_hash):
+                raise SignatureError(f"Invalid signature for input {i}")
+
+
 class Transaction():
     def __init__(self, vin, vout):
         self.timestamp = int(time.time())
@@ -131,7 +189,7 @@ class Transaction():
         return hashlib.sha256((str(self.timestamp) + str(self.vin) + str(self.vout)).encode('utf-8')).hexdigest()
 
     @classmethod
-    def transfer(cls, from_addr, to_addr, amount, fee=MIN_FEE):
+    def transfer(cls, from_addr, to_addr, amount, fee=MIN_FEE, private_key=None):
         if not is_valid_address(from_addr):
             raise InvalidAddressError(f"Invalid sender address: {from_addr[:20]}...")
         
@@ -147,6 +205,9 @@ class Transaction():
         if amount <= 0:
             raise AmountError("Amount must be positive")
         
+        if not private_key:
+            raise WalletLockedError("Wallet is locked. Please unlock with password first.")
+        
         actual_fee = max(fee, MIN_FEE)
         total_needed = amount + actual_fee
         
@@ -158,7 +219,14 @@ class Transaction():
         
         check_double_spend(ready_utxo)
         
-        validate_transaction_inputs(ready_utxo, from_addr)
+        for utxo in ready_utxo:
+            data_to_sign = f"{utxo.hash}:{utxo.amount}"
+            signature = sign_data(data_to_sign, private_key)
+            key_hash = hash160(private_key.encode())
+            utxo.signature = signature
+            utxo.pubkey = key_hash
+        
+        validate_transaction_inputs(ready_utxo, from_addr, require_signature=False)
         
         vin = ready_utxo
         vout = []

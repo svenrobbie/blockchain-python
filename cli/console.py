@@ -1,9 +1,10 @@
 # coding:utf-8
+import os
 import sys
 import time
 import threading
-import os
 import getpass
+
 from lib.common import colored, cprint
 
 import node
@@ -11,7 +12,6 @@ import miner
 import account as account_module
 import transaction
 import database_sqlite
-import block as block_module
 from exceptions import (
     ValidationError, DoubleSpendError, InvalidAddressError,
     InsufficientFundsError, AmountError, UTXONotFoundError,
@@ -37,17 +37,30 @@ BANNER = """
 """
 
 
-class BlockchainCLI:
+class Console:
     PROMPT = "blockchain> "
 
     def __init__(self):
         self.running = True
         self.mining = False
-        self.mining_thread = None
+        self.mining_state = {'running': False, 'thread': None}
         self.dashboard_thread = None
         self.dashboard_running = False
 
-    def start(self):
+    def get_prompt(self):
+        account = account_module.get_account()
+        if account:
+            accounts = account_module.get_accounts()
+            for i, acc in enumerate(accounts, 1):
+                if acc['address'] == account['address'] and acc.get('is_active'):
+                    return f"blockchain[{i}]> "
+        return self.PROMPT
+
+    def get_balance(self, address):
+        unspent = transaction.Vout.get_unspent(address)
+        return sum(vout.amount for vout in unspent)
+
+    def run(self):
         os.system('cls' if os.name == 'nt' else 'clear')
         print(colored(BANNER, "cyan"))
         print(colored("  Welcome to Blockchain Python v1.0!", "yellow", bold=True))
@@ -63,7 +76,7 @@ class BlockchainCLI:
                     self.handle_command(cmd)
             except KeyboardInterrupt:
                 print("\n")
-                if self.mining:
+                if self.mining_state['running']:
                     self.stop_mining()
                 if self.dashboard_running:
                     self.stop_dashboard()
@@ -74,15 +87,6 @@ class BlockchainCLI:
                 print(colored(f"Error: {e}", "red"))
 
         print(colored("\nGoodbye! Keep on blockchainin'!", "yellow"))
-
-    def get_prompt(self):
-        account = account_module.get_account()
-        if account:
-            accounts = account_module.get_accounts()
-            for i, acc in enumerate(accounts, 1):
-                if acc['address'] == account['address'] and acc.get('is_active'):
-                    return f"blockchain[{i}]> "
-        return self.PROMPT
 
     def handle_command(self, cmd):
         parts = cmd.split()
@@ -135,11 +139,10 @@ class BlockchainCLI:
         
         print(colored("\nNode", "cyan", bold=True))
         print("  node start <port>     - Start node server (default: 3009)")
-        print("  node add <address>    - Add peer node")
+        print("  node add <address>     - Add peer node")
         print("  node list            - List nodes with health status")
         print("  node status          - Show node statistics")
-        print("  node discover        - Discover nodes via mDNS")
-        print("  node ping <addr>     - Ping a specific node")
+        print("  node discover         - Discover nodes via mDNS")
         
         print(colored("\nMining", "cyan", bold=True))
         print("  mine                 - Start mining (foreground)")
@@ -166,7 +169,7 @@ class BlockchainCLI:
         print("  exit                 - Exit CLI")
 
     def cmd_exit(self, args):
-        if self.mining:
+        if self.mining_state['running']:
             self.stop_mining()
         self.running = False
 
@@ -280,7 +283,7 @@ class BlockchainCLI:
         
         print(colored("  +--------------------+  +--------------------+", "white"))
         print(colored("  | BLOCK #: ", "white") + colored(f"{len(chain):>6}", "green", bold=True) + colored(" |  | ", "white") + 
-              colored("MINING: ", "white") + colored("ON " if self.mining else "OFF", "yellow" if self.mining else "red", bold=True) + 
+              colored("MINING: ", "white") + colored("ON " if self.mining_state['running'] else "OFF", "yellow" if self.mining_state['running'] else "red", bold=True) + 
               colored("    |"))
         print(colored("  | PENDING TX: ", "white") + colored(f"{len(pending):>4}", "yellow", bold=True) + colored(" |  | ", "white") +
               colored("NODES: ", "white") + colored(f"{alive_nodes:>6}", "cyan", bold=True) + colored(" |"))
@@ -330,7 +333,7 @@ class BlockchainCLI:
         print(f"Blocks:      {colored(str(len(chain)), 'green')} ")
         print(f"Tx Confirmed: {colored(str(len(transactions)), 'green')} ")
         print(f"Tx Pending:   {colored(str(len(pending)), 'yellow')} ")
-        print(f"Mining:      {colored('Yes' if self.mining else 'No', 'green' if not self.mining else 'yellow')} ")
+        print(f"Mining:      {colored('Yes' if self.mining_state['running'] else 'No', 'green' if not self.mining_state['running'] else 'yellow')} ")
         print(f"Balance:     {colored(str(balance), 'green')} coins")
         if account:
             print(f"Address:     {colored(account['address'][:20] + '...', 'white')} ")
@@ -449,19 +452,19 @@ class BlockchainCLI:
         self.start_mining()
 
     def start_mining(self):
-        if self.mining:
+        if self.mining_state['running']:
             print(colored("Mining already in progress!", "yellow"))
             return
 
         print(colored("\n=== Starting Mining ===", "cyan", bold=True))
         print(colored("Press Ctrl+C to stop\n", "yellow"))
 
-        self.mining = True
-        self.mining_thread = threading.Thread(target=self._mining_loop, daemon=True)
-        self.mining_thread.start()
+        self.mining_state['running'] = True
+        self.mining_state['thread'] = threading.Thread(target=self._mining_loop, daemon=True)
+        self.mining_state['thread'].start()
 
     def _mining_loop(self):
-        while self.mining:
+        while self.mining_state['running']:
             try:
                 print(colored(f"[{time.strftime('%H:%M:%S')}] ", "dim") + "Mining block...", end="\r")
                 block = miner.mine()
@@ -469,20 +472,23 @@ class BlockchainCLI:
                       colored(f"Block #{block.index} ", "green", bold=True) +
                       f"mined! (nonce={block.nouce}, diff={block.difficulty})")
                 time.sleep(1)
+            except KeyboardInterrupt:
+                self.mining_state['running'] = False
+                break
             except Exception as e:
-                if self.mining:
+                if self.mining_state['running']:
                     print(colored(f"\nMining error: {e}", "red"))
                     time.sleep(5)
 
     def stop_mining(self):
-        if not self.mining:
+        if not self.mining_state['running']:
             print(colored("Mining not running", "yellow"))
             return
 
         print(colored("\nStopping mining...", "yellow"))
-        self.mining = False
-        if self.mining_thread:
-            self.mining_thread.join(timeout=2)
+        self.mining_state['running'] = False
+        if self.mining_state['thread']:
+            self.mining_state['thread'].join(timeout=2)
         print(colored("Mining stopped", "green"))
 
     def cmd_wallet(self, args):
@@ -564,10 +570,6 @@ class BlockchainCLI:
             print(colored("No accounts found", "yellow"))
         print(colored("\n  Use 'login <index>' to switch accounts", "dim"))
 
-    def get_balance(self, address):
-        unspent = transaction.Vout.get_unspent(address)
-        return sum(vout.amount for vout in unspent)
-
     def cmd_tx(self, args):
         if not args:
             print(colored("Usage: tx <send|pending|view>", "yellow"))
@@ -645,23 +647,17 @@ class BlockchainCLI:
             transaction.Transaction.unblock_spread(tx_dict)
         except InsufficientFundsError as e:
             print(colored(f"\nError: Insufficient funds!", "red", bold=True))
-            print(colored(f"  {e}", "red"))
             print(f"  Your balance: {colored(str(balance), 'yellow')} coins")
         except InvalidAddressError as e:
             print(colored(f"\nError: Invalid address!", "red", bold=True))
-            print(colored(f"  {e}", "red"))
         except DoubleSpendError as e:
             print(colored(f"\nError: Double spend detected!", "red", bold=True))
-            print(colored(f"  {e}", "red"))
         except AmountError as e:
             print(colored(f"\nError: Invalid amount!", "red", bold=True))
-            print(colored(f"  {e}", "red"))
         except UTXONotFoundError as e:
             print(colored(f"\nError: UTXO not found!", "red", bold=True))
-            print(colored(f"  {e}", "red"))
         except ValidationError as e:
             print(colored(f"\nError: Validation failed!", "red", bold=True))
-            print(colored(f"  {e}", "red"))
         except Exception as e:
             print(colored(f"\nTransaction failed: {e}", "red"))
 
@@ -797,8 +793,6 @@ class BlockchainCLI:
             print(f"Last 10 avg time:  {sum(recent_diffs) // len(recent_diffs)}s")
 
     def chain_verify(self):
-        import node
-
         bcdb = database_sqlite.BlockChainDB()
         chain = bcdb.find_all()
 
@@ -832,12 +826,3 @@ class BlockchainCLI:
 
     def cmd_pending(self, args):
         self.tx_pending()
-
-
-def main():
-    cli = BlockchainCLI()
-    cli.start()
-
-
-if __name__ == '__main__':
-    main()

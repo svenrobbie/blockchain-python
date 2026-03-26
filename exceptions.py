@@ -31,3 +31,11 @@ class UTXONotFoundError(ValidationError):
 
 class TransactionError(ValidationError):
     pass
+
+
+class WalletLockedError(ValidationError):
+    pass
+
+
+class InvalidPasswordError(ValidationError):
+    pass

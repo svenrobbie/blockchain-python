@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain Python</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app">
+        <nav class="sidebar">
+            <div class="logo">BLOCKCHAIN</div>
+            <div class="nav">
+                <a class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
+                    <span class="nav-icon">&#127968;</span> Dashboard
+                </a>
+                <a class="nav-item" data-page="send" onclick="navigate('send')">
+                    <span class="nav-icon">&#128179;</span> Send
+                </a>
+                <a class="nav-item" data-page="history" onclick="navigate('history')">
+                    <span class="nav-icon">&#128203;</span> History
+                </a>
+                <a class="nav-item" data-page="explorer" onclick="navigate('explorer')">
+                    <span class="nav-icon">&#128269;</span> Explorer
+                </a>
+                <a class="nav-item" data-page="wallet" onclick="navigate('wallet')">
+                    <span class="nav-icon">&#128273;</span> Wallet
+                </a>
+            </div>
+        </nav>
+        
+        <main class="main-content scrollbar" id="mainContent">
+            <!-- Content will be injected here -->
+        </main>
+    </div>
+
+    <script>
+        let currentPage = 'dashboard';
+        let currentAccount = null;
+
+        async function api(endpoint, options = {}) {
+            try {
+                const response = await fetch(`/api${endpoint}`, options);
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                return { error: error.message };
+            }
+        }
+
+        function navigate(page) {
+            currentPage = page;
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.page === page);
+            });
+            loadPage(page);
+        }
+
+        async function loadPage(page) {
+            const main = document.getElementById('mainContent');
+            
+            switch(page) {
+                case 'dashboard':
+                    await loadDashboard(main);
+                    break;
+                case 'send':
+                    await loadSend(main);
+                    break;
+                case 'history':
+                    await loadHistory(main);
+                    break;
+                case 'explorer':
+                    await loadExplorer(main);
+                    break;
+                case 'wallet':
+                    await loadWallet(main);
+                    break;
+                default:
+                    main.innerHTML = '<div class="empty-state">Page not found</div>';
+            }
+        }
+
+        async function loadDashboard(main) {
+            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            const [accountRes, chainRes, balanceRes] = await Promise.all([
+                api('/wallet/account'),
+                api('/chain/status'),
+                api('/wallet/balance')
+            ]);
+            
+            currentAccount = accountRes.account;
+            const balance = balanceRes.balance || 0;
+            const address = balanceRes.address || 'No wallet';
+            
+            main.innerHTML = `
+                <div class="header">
+                    <h1 class="page-title">Dashboard</h1>
+                </div>
+                
+                <div class="balance-card">
+                    <div class="balance-label">Your Balance</div>
+                    <div class="balance-amount">${balance}</div>
+                    <div class="balance-address">${address ? address.substring(0, 20) + '...' : 'No wallet'}</div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Blocks</div>
+                        <div class="stat-value">${chainRes.block_count || 0}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Total Fees</div>
+                        <div class="stat-value">${chainRes.total_fees || 0}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Last Block</div>
+                        <div class="stat-value">#${chainRes.last_block?.index || 0}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Difficulty</div>
+                        <div class="stat-value">${chainRes.last_block?.difficulty || 5}</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 class="section-title">Quick Actions</h3>
+                    <div style="display: flex; gap: 12px;">
+                        <button class="btn btn-primary" onclick="navigate('send')">Send Coins</button>
+                        <button class="btn btn-secondary" onclick="loadDashboard(document.getElementById('mainContent'));">Refresh</button>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 class="section-title">Recent Blocks</h3>
+                    <div id="recentBlocks"></div>
+                </div>
+            `;
+            
+            loadRecentBlocks();
+        }
+
+        async function loadRecentBlocks() {
+            const container = document.getElementById('recentBlocks');
+            if (!container) return;
+            
+            const res = await api('/chain/blocks?limit=5');
+            
+            if (res.blocks && res.blocks.length > 0) {
+                container.innerHTML = res.blocks.map(block => `
+                    <div class="block-card" onclick="viewBlock(${block.index})">
+                        <div style="display: flex; justify-content: space-between;">
+                            <strong>Block #${block.index}</strong>
+                            <span class="block-hash">${block.hash}</span>
+                        </div>
+                        <div style="margin-top: 8px; color: var(--text-secondary); font-size: 0.85rem;">
+                            TX: ${block.tx_count} | Difficulty: ${block.difficulty} | Fees: ${block.fees}
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = '<div class="empty-state">No blocks yet</div>';
+            }
+        }
+
+        async function viewBlock(index) {
+            const main = document.getElementById('mainContent');
+            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            const res = await api(`/chain/block/${index}`);
+            
+            if (res.error) {
+                main.innerHTML = `<div class="alert alert-error">${res.error}</div>`;
+                return;
+            }
+            
+            main.innerHTML = `
+                <div class="header">
+                    <h1 class="page-title">Block #${res.index}</h1>
+                    <button class="btn btn-secondary" onclick="navigate('explorer')">Back</button>
+                </div>
+                
+                <div class="card">
+                    <h3 class="section-title">Block Details</h3>
+                    <div style="display: grid; gap: 12px;">
+                        <div><strong>Hash:</strong> <span class="block-hash">${res.hash}</span></div>
+                        <div><strong>Previous Hash:</strong> <span class="block-hash">${res.previous_hash || 'None'}</span></div>
+                        <div><strong>Timestamp:</strong> ${new Date(res.timestamp * 1000).toLocaleString()}</div>
+                        <div><strong>Nonce:</strong> ${res.nonce}</div>
+                        <div><strong>Difficulty:</strong> ${res.difficulty}</div>
+                        <div><strong>Fees Collected:</strong> ${res.fees_collected}</div>
+                        <div><strong>Transactions:</strong> ${res.tx_count}</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 class="section-title">Transactions (${res.tx_hashes?.length || 0})</h3>
+                    ${res.tx_hashes?.map(tx => `
+                        <div class="tx-item">
+                            <div class="tx-hash">${tx}</div>
+                        </div>
+                    `).join('') || '<div class="empty-state">No transactions</div>'}
+                </div>
+            `;
+        }
+
+        async function loadSend(main) {
+            if (!currentAccount) {
+                await loadWallet(main);
+                return;
+            }
+            
+            const balanceRes = await api('/wallet/balance');
+            
+            main.innerHTML = `
+                <div class="header">
+                    <h1 class="page-title">Send Coins</h1>
+                </div>
+                
+                <div class="card">
+                    <div id="sendAlert"></div>
+                    <form onsubmit="handleSend(event)">
+                        <div class="form-group">
+                            <label class="form-label">To Address</label>
+                            <input type="text" id="sendTo" class="form-input" placeholder="1ABC...XYZ" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Amount</label>
+                            <input type="number" id="sendAmount" class="form-input" placeholder="0" min="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" id="sendPassword" class="form-input" placeholder="Your wallet password" required>
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <strong>Available Balance:</strong> ${balanceRes.balance || 0} coins
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block" id="sendBtn">Send</button>
+                    </form>
+                </div>
+            `;
+        }
+
+        async function handleSend(event) {
+            event.preventDefault();
+            
+            const btn = document.getElementById('sendBtn');
+            const alert = document.getElementById('sendAlert');
+            
+            const from = currentAccount.address;
+            const to = document.getElementById('sendTo').value;
+            const amount = parseInt(document.getElementById('sendAmount').value);
+            const password = document.getElementById('sendPassword').value;
+            
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            
+            const res = await api('/wallet/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ from_address: from, to_address: to, amount, password })
+            });
+            
+            if (res.success) {
+                alert.innerHTML = `<div class="alert alert-success">
+                    <strong>Success!</strong> Sent ${amount} coins.<br>
+                    TX Hash: ${res.tx_hash.substring(0, 20)}...
+                </div>`;
+                document.getElementById('sendPassword').value = '';
+                document.getElementById('sendAmount').value = '';
+            } else {
+                alert.innerHTML = `<div class="alert alert-error"><strong>Error:</strong> ${res.error}</div>`;
+            }
+            
+            btn.disabled = false;
+            btn.textContent = 'Send';
+        }
+
+        async function loadHistory(main) {
+            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            let txs = [];
+            let address = null;
+            
+            const balanceRes = await api('/wallet/balance');
+            address = balanceRes.address;
+            
+            if (address) {
+                const res = await api(`/chain/address/${address}`);
+                txs = res.transactions || [];
+            }
+            
+            main.innerHTML = `
+                <div class="header">
+                    <h1 class="page-title">Transaction History</h1>
+                    <button class="btn btn-secondary" onclick="loadHistory(document.getElementById('mainContent'))">Refresh</button>
+                </div>
+                
+                <div class="card">
+                    ${txs.length > 0 ? `
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Hash</th>
+                                    <th>Status</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${txs.map(tx => `
+                                    <tr>
+                                        <td><span class="badge ${tx.direction === 'received' ? 'badge-success' : 'badge-warning'}">${tx.direction || 'sent'}</span></td>
+                                        <td>${tx.amount}</td>
+                                        <td><span class="block-hash">${tx.hash}</span></td>
+                                        <td><span class="badge ${tx.status === 'confirmed' ? 'badge-success' : 'badge-warning'}">${tx.status}</span></td>
+                                        <td>${new Date(tx.timestamp * 1000).toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    ` : `
+                        <div class="empty-state">
+                            <p>No transactions yet</p>
+                            <button class="btn btn-primary" onclick="navigate('send')" style="margin-top: 16px;">Send your first coins</button>
+                        </div>
+                    `}
+                </div>
+            `;
+        }
+
+        async function loadExplorer(main) {
+            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            const res = await api('/chain/blocks?limit=20');
+            
+            main.innerHTML = `
+                <div class="header">
+                    <h1 class="page-title">Block Explorer</h1>
+                    <button class="btn btn-secondary" onclick="loadExplorer(document.getElementById('mainContent'))">Refresh</button>
+                </div>
+                
+                <div class="card">
+                    <h3 class="section-title">Recent Blocks</h3>
+                    ${res.blocks && res.blocks.length > 0 ? res.blocks.map(block => `
+                        <div class="block-card" onclick="viewBlock(${block.index})">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>Block #${block.index}</strong>
+                                    <div style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">
+                                        ${new Date(block.timestamp * 1000).toLocaleString()}
+                                    </div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div>TX: ${block.tx_count}</div>
+                                    <div style="color: var(--text-secondary); font-size: 0.85rem;">Diff: ${block.difficulty}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('') : '<div class="empty-state">No blocks yet</div>'}
+                </div>
+            `;
+        }
+
+        async function loadWallet(main) {
+            main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            const [accountsRes, balanceRes] = await Promise.all([
+                api('/wallet/accounts'),
+                api('/wallet/balance')
+            ]);
+            
+            const accounts = accountsRes.accounts || [];
+            currentAccount = accounts.find(a => a.is_active) || accounts[0];
+            
+            main.innerHTML = `
+                <div class="header">
+                    <h1 class="page-title">Wallet</h1>
+                </div>
+                
+                <div class="card">
+                    <h3 class="section-title">Accounts</h3>
+                    ${accounts.length > 0 ? accounts.map((acc, i) => `
+                        <div class="block-card" style="${acc.is_active ? 'border-color: var(--accent);' : ''}" onclick="selectAccount(${acc.id || i + 1})">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>Account ${acc.id || i + 1}</strong>
+                                    <div class="block-hash" style="margin-top: 4px;">${acc.address.substring(0, 25)}...</div>
+                                </div>
+                                <div>
+                                    ${acc.is_active ? '<span class="badge badge-success">Active</span>' : ''}
+                                    ${acc.has_password ? '<span class="badge badge-success" style="margin-left: 8px;">Locked</span>' : '<span class="badge badge-warning" style="margin-left: 8px;">No Password</span>'}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('') : '<div class="empty-state">No accounts yet</div>'}
+                    
+                    <div style="margin-top: 20px;">
+                        <button class="btn btn-primary" onclick="showCreateWallet()">Create New Wallet</button>
+                    </div>
+                </div>
+                
+                <div id="walletAlert"></div>
+                
+                <div class="card">
+                    <h3 class="section-title">Current Balance</h3>
+                    <div style="font-size: 2rem; font-weight: bold; color: var(--accent);">
+                        ${balanceRes.balance || 0} coins
+                    </div>
+                    ${currentAccount ? `
+                        <div class="block-hash" style="margin-top: 12px;">
+                            ${currentAccount.address}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        async function selectAccount(index) {
+            const res = await api(`/wallet/login/${index}`, { method: 'POST' });
+            if (res.success) {
+                loadWallet(document.getElementById('mainContent'));
+            }
+        }
+
+        function showCreateWallet() {
+            const alert = document.getElementById('walletAlert');
+            alert.innerHTML = `
+                <div class="card" style="margin-top: 20px;">
+                    <h3 class="section-title">Create New Wallet</h3>
+                    <form onsubmit="handleCreateWallet(event)">
+                        <div class="form-group">
+                            <label class="form-label">Password (to encrypt your wallet)</label>
+                            <input type="password" id="newWalletPassword" class="form-input" placeholder="Enter password" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Confirm Password</label>
+                            <input type="password" id="newWalletPasswordConfirm" class="form-input" placeholder="Confirm password" required>
+                        </div>
+                        <button type="submit" class="btn btn-success">Create Wallet</button>
+                        <button type="button" class="btn btn-secondary" onclick="loadWallet(document.getElementById('mainContent'))">Cancel</button>
+                    </form>
+                </div>
+            `;
+        }
+
+        async function handleCreateWallet(event) {
+            event.preventDefault();
+            
+            const password = document.getElementById('newWalletPassword').value;
+            const confirm = document.getElementById('newWalletPasswordConfirm').value;
+            
+            if (password !== confirm) {
+                alert('Passwords do not match!');
+                return;
+            }
+            
+            const res = await api('/wallet/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+            
+            const alert = document.getElementById('walletAlert');
+            if (res.success) {
+                alert.innerHTML = `<div class="alert alert-success">
+                    <strong>Wallet Created!</strong><br>
+                    Address: ${res.address}<br>
+                    Remember your password!
+                </div>`;
+                loadWallet(document.getElementById('mainContent'));
+            } else {
+                alert.innerHTML = `<div class="alert alert-error">Error: ${res.error}</div>`;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadPage('dashboard');
+        });
+    </script>
+</body>
+</html>
