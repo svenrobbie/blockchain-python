@@ -1,39 +1,74 @@
 # Blockchain Python
 
-A blockchain implementation in Python for learning and experimentation.
+A blockchain implementation in Python featuring mining, transactions, node networking, dynamic difficulty, transaction fees, and SQLite persistence.
 
-Features: Mining, Transactions, Node Network, Dynamic Difficulty, Transaction Fees, and SQLite Persistence.
+## Features
+
+- **Mining** - Proof of Work with dynamic difficulty (2-5 leading zeros)
+- **Transactions** - UTXO-based with mandatory 1 coin fees
+- **Node Network** - P2P networking with mDNS discovery and health monitoring
+- **Web UI** - FastAPI-based dashboard for wallet management
+- **CLI** - One-shot commands and interactive console mode
 
 ## Installation
 
-1. Make sure [Python 3.6+](https://www.python.org/downloads/) is installed
-2. Install dependencies:
 ```bash
-pip install zeroconf
-```
-3. Run the CLI:
-```bash
-python cli.py
+# Clone the repository
+git clone <repository-url>
+cd blockchain-python
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Optional: for web UI
+pip install -r web/requirements.txt
 ```
 
 ## Quick Start
 
 ```bash
-# Create a wallet
-wallet create
+# One-shot commands
+python blockchain.py wallet new <password>
+python blockchain.py wallet list
+python blockchain.py wallet balance
+python blockchain.py chain status
 
-# Start mining
-mine
+# Interactive console
+python blockchain.py console
 
-# Send coins
-tx send <address> <amount>
+# Start web UI
+python blockchain.py start
+```
 
-# View blockchain
-chain info
-chain view
+## Project Structure
 
-# Dashboard mode
-dashboard
+```
+blockchain-python/
+├── blockchain.py              # Main entry point
+├── blockchain/               # Core blockchain package
+│   ├── account.py            # Wallet/account management
+│   ├── block.py              # Block class with PoW
+│   ├── database.py           # SQLite database layer
+│   ├── discovery.py          # mDNS node discovery
+│   ├── exceptions.py         # Custom exceptions
+│   ├── health.py             # Node health monitoring
+│   ├── miner.py              # Mining logic
+│   ├── model.py              # Base model class
+│   ├── node.py               # Node management
+│   ├── rpc.py                # RPC server/client
+│   ├── transaction.py        # UTXO transactions
+│   └── data/                 # Database storage
+├── cli/                      # CLI package
+│   ├── commands.py           # One-shot command implementations
+│   └── console.py            # Interactive console mode
+├── lib/                      # Shared utilities
+│   ├── common.py            # Crypto utilities, colored output
+│   └── ripemd.py            # RIPEMD160 implementation
+└── web/                      # Web UI
+    ├── main.py              # FastAPI application
+    ├── api/                 # REST API endpoints
+    ├── static/              # CSS styles
+    └── templates/           # HTML templates
 ```
 
 ## CLI Commands
@@ -41,98 +76,90 @@ dashboard
 ### Wallet
 | Command | Description |
 |---------|-------------|
-| `wallet create` | Create a new wallet |
-| `wallet address` | Show current account address |
-| `wallet balance` | Show account balance |
+| `wallet new <password>` | Create new wallet |
 | `wallet list` | List all accounts |
-
-### Mining
-| Command | Description |
-|---------|-------------|
-| `mine` | Start mining (foreground) |
-| `miner start` | Start mining |
-| `miner stop` | Stop mining |
+| `wallet login <index>` | Switch to account |
+| `wallet balance` | Show balance |
+| `wallet address` | Show current address |
 
 ### Transactions
 | Command | Description |
 |---------|-------------|
-| `tx send <to> <amount>` | Send coins to address |
-| `tx pending` | List pending transactions |
-| `tx view <hash>` | View transaction details |
+| `send <to> <amount> <password>` | Send coins |
+
+### Mining
+| Command | Description |
+|---------|-------------|
+| `mine start` | Start mining |
+| `mine stop` | Stop mining |
+
+### Network
+| Command | Description |
+|---------|-------------|
+| `node connect <host:port>` | Add peer node |
+| `node list` | List connected nodes |
+| `node discover` | Discover nodes via mDNS |
 
 ### Blockchain
 | Command | Description |
 |---------|-------------|
-| `chain status` | Show blockchain status |
-| `chain view <index>` | View block by index |
-| `chain info` | Show blockchain info |
+| `chain status` | Chain statistics |
+| `chain block <index>` | View block details |
+| `chain tx <hash>` | View transaction |
 | `chain verify` | Verify chain integrity |
-
-### Node Network
-| Command | Description |
-|---------|-------------|
-| `node start <port>` | Start node server (default: 3009) |
-| `node add <address>` | Add peer node |
-| `node list` | List nodes with health status |
-| `node status` | Show node statistics |
-| `node discover` | Discover nodes via mDNS |
-| `node ping <addr>` | Ping a specific node |
 
 ### General
 | Command | Description |
 |---------|-------------|
-| `dashboard` | Live updating status view |
-| `status` | Show overall status |
-| `help` | Show this help |
-| `clear` | Clear screen |
-| `exit` | Exit CLI |
+| `start` | Start web UI |
+| `console` | Interactive mode |
+| `status` | Quick status summary |
+| `pending` | List pending transactions |
 
-## Features
+## Configuration
 
 ### Dynamic Difficulty
-Block difficulty automatically adjusts based on mining speed:
-- Mining too fast → difficulty increases
-- Mining too slow → difficulty decreases
-- Range: 2-5 leading zeros
-- Adjustment: Every 10 blocks
+- **Range**: 2-5 leading zeros
+- **Adjustment**: Every 10 blocks based on 60s target time
+- **Too fast** → difficulty increases
+- **Too slow** → difficulty decreases
 
 ### Transaction Fees
-- Mandatory 1 coin fee per transaction
-- Miner collects fees in addition to block reward
-- Fee displayed in transaction and block details
+- **Mandatory**: 1 coin minimum fee
+- **Collection**: Miner receives fees + 20 coin reward
+- **Display**: Shown in transaction and block details
 
-### Node Network
-- **mDNS Discovery**: Automatically discovers other nodes on local network
-- **Health Monitoring**: Pings all nodes every 60 seconds
-- **Auto-recovery**: Removes dead nodes after 5 consecutive failures
+### Node Health
+- **Ping interval**: 60 seconds
+- **Timeout**: 10 seconds
+- **Max failures**: 5 before removal
+- **Discovery**: mDNS broadcasts every 60 seconds
 
-### Database
-- SQLite for fast, reliable storage
-- Automatic migration for schema updates
+## Web UI
 
-## Architecture
-
+Start the web interface:
+```bash
+python blockchain.py start
 ```
-cli.py              # Interactive CLI interface
-block.py            # Block class with PoW
-miner.py            # Mining logic with fees
-transaction.py      # Transaction/UTXO logic
-node.py             # Node management
-node_discovery.py   # mDNS service discovery
-node_health.py      # Node health monitoring
-rpc.py              # RPC server/client
-database_sqlite.py   # SQLite database layer
-```
+
+Access at `http://localhost:5001`
+
+Features:
+- Dashboard with balance and chain stats
+- Send coins interface
+- Transaction history
+- Block explorer
+- Wallet management
 
 ## Security Notes
 
-This is an educational implementation. For production use, you would need:
-- Transaction signing (ECDSA)
-- Signature verification
-- UTXO validation
+This is an educational implementation. For production use, consider:
+- ECDSA signature verification
 - Merkle tree verification
 - TLS encryption for RPC
-- Consensus algorithm improvements
+- Improved consensus algorithm
+- Private key encryption (already implemented)
+- Network encryption
 
 ## License
 

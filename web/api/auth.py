@@ -41,7 +41,7 @@ class PasswordVerifyRequest(BaseModel):
 
 @router.post("/verify")
 async def verify_password(request: PasswordVerifyRequest):
-    from database_sqlite import AccountDB
+    from blockchain.database import AccountDB
     
     adb = AccountDB()
     account = adb.find_by_address(request.address)
@@ -62,7 +62,7 @@ async def verify_password(request: PasswordVerifyRequest):
 
 @router.post("/unlock")
 async def unlock_wallet(request: PasswordVerifyRequest):
-    from database_sqlite import AccountDB
+    from blockchain.database import AccountDB
     
     adb = AccountDB()
     account = adb.find_by_address(request.address)

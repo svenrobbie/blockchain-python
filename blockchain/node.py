@@ -1,11 +1,11 @@
 # coding:utf-8
 import multiprocessing
 import time
-import rpc
-from database_sqlite import NodeDB, TransactionDB, BlockChainDB
+from blockchain import rpc
+from blockchain.database import NodeDB, TransactionDB, BlockChainDB
 from lib.common import cprint
-from block import Block
-from transaction import validate_transaction
+from blockchain.block import Block
+from blockchain.transaction import validate_transaction
 
 discovery_instance = None
 health_instance = None
@@ -74,14 +74,14 @@ def start_node(hostport='0.0.0.0:3009'):
     cprint('INFO', 'Node start success. Listen at %s.' % (hostport,))
 
     try:
-        from node_discovery import NodeDiscovery
+        from blockchain.discovery import NodeDiscovery
         discovery_instance = NodeDiscovery(port=port)
         discovery_instance.start()
     except Exception as e:
         cprint('WARN', f'Failed to start discovery: {e}')
 
     try:
-        from node_health import NodeHealthMonitor
+        from blockchain.health import NodeHealthMonitor
         health_instance = NodeHealthMonitor()
         health_instance.start()
     except Exception as e:
@@ -182,7 +182,7 @@ def add_node(address):
 
 def check_node(address):
     try:
-        from node_health import ping_node
+        from blockchain.health import ping_node
         return ping_node(address)
     except Exception as e:
         cprint('ERROR', f'Node check failed: {e}')

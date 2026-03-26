@@ -7,12 +7,9 @@ import getpass
 
 from lib.common import colored, cprint
 
-import node
-import miner
-import account as account_module
-import transaction
-import database_sqlite
-from exceptions import (
+from blockchain import node, miner, account as account_module, transaction
+from blockchain import database as db_module
+from blockchain.exceptions import (
     ValidationError, DoubleSpendError, InvalidAddressError,
     InsufficientFundsError, AmountError, UTXONotFoundError,
     WalletLockedError, InvalidPasswordError

@@ -8,13 +8,10 @@ from datetime import datetime
 
 from lib.common import colored, cprint
 
-import node
-import miner
-import account as account_module
-import transaction
-import database_sqlite
-import block as block_module
-from exceptions import (
+from blockchain import node, miner, account as account_module, transaction
+from blockchain import database as db_module
+from blockchain import block as block_module
+from blockchain.exceptions import (
     ValidationError, DoubleSpendError, InvalidAddressError,
     InsufficientFundsError, AmountError, UTXONotFoundError,
     WalletLockedError, InvalidPasswordError
@@ -324,7 +321,7 @@ def cmd_node_status(args):
 
 
 def cmd_chain_status(args):
-    bcdb = database_sqlite.BlockChainDB()
+    bcdb = db_module.BlockChainDB()
     chain = bcdb.find_all()
 
     print(colored("\n=== Chain Status ===", "cyan", bold=True))
@@ -345,7 +342,7 @@ def cmd_chain_status(args):
 
 
 def cmd_chain_block(args):
-    bcdb = database_sqlite.BlockChainDB()
+    bcdb = db_module.BlockChainDB()
     chain = bcdb.find_all()
     index = args.index
 
@@ -372,8 +369,8 @@ def cmd_chain_block(args):
 
 
 def cmd_chain_tx(args):
-    txdb = database_sqlite.TransactionDB()
-    untxdb = database_sqlite.UnTransactionDB()
+    txdb = db_module.TransactionDB()
+    untxdb = db_module.UnTransactionDB()
     tx_hash = args.hash
 
     all_txs = txdb.find_all() + untxdb.find_all()
@@ -396,7 +393,7 @@ def cmd_chain_tx(args):
 
 
 def cmd_chain_verify(args):
-    bcdb = database_sqlite.BlockChainDB()
+    bcdb = db_module.BlockChainDB()
     chain = bcdb.find_all()
 
     print(colored("\n=== Verifying Chain ===", "cyan", bold=True))
@@ -429,11 +426,11 @@ def cmd_chain_verify(args):
 
 
 def cmd_status(args):
-    bcdb = database_sqlite.BlockChainDB()
+    bcdb = db_module.BlockChainDB()
     chain = bcdb.find_all()
-    txdb = database_sqlite.TransactionDB()
+    txdb = db_module.TransactionDB()
     transactions = txdb.find_all()
-    untxdb = database_sqlite.UnTransactionDB()
+    untxdb = db_module.UnTransactionDB()
     pending = untxdb.find_all()
 
     account = account_module.get_account()
@@ -458,7 +455,7 @@ def cmd_status(args):
 
 
 def cmd_pending(args):
-    untxdb = database_sqlite.UnTransactionDB()
+    untxdb = db_module.UnTransactionDB()
     pending = untxdb.find_all()
     
     print(colored("\n=== Pending Transactions ===", "cyan", bold=True))

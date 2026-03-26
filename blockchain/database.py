@@ -4,8 +4,8 @@ import json
 import os
 import time
 
-_script_dir = os.path.dirname(os.path.abspath(__file__))
-DATABASE_PATH = os.path.join(_script_dir, 'data', 'blockchain_v2.db')
+_package_dir = os.path.dirname(os.path.abspath(__file__))
+DATABASE_PATH = os.path.join(_package_dir, 'data', 'blockchain_v2.db')
 
 
 class SQLiteDB:

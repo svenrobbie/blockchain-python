@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/chain", tags=["chain"])
 
 @router.get("/status")
 async def get_chain_status():
-    from database_sqlite import BlockChainDB
+    from blockchain.database import BlockChainDB
     
     bcdb = BlockChainDB()
     chain = bcdb.find_all()
@@ -41,7 +41,7 @@ async def get_chain_status():
 
 @router.get("/blocks")
 async def get_blocks(limit: int = 10, offset: int = 0):
-    from database_sqlite import BlockChainDB
+    from blockchain.database import BlockChainDB
     
     bcdb = BlockChainDB()
     chain = bcdb.find_all()
@@ -69,7 +69,7 @@ async def get_blocks(limit: int = 10, offset: int = 0):
 
 @router.get("/block/{index}")
 async def get_block(index: int):
-    from database_sqlite import BlockChainDB
+    from blockchain.database import BlockChainDB
     
     bcdb = BlockChainDB()
     chain = bcdb.find_all()
@@ -94,7 +94,7 @@ async def get_block(index: int):
 
 @router.get("/transactions")
 async def get_transactions(limit: int = 20, offset: int = 0):
-    from database_sqlite import TransactionDB
+    from blockchain.database import TransactionDB
     
     txdb = TransactionDB()
     txs = txdb.find_all()
@@ -122,7 +122,7 @@ async def get_transactions(limit: int = 20, offset: int = 0):
 
 @router.get("/transaction/{tx_hash}")
 async def get_transaction(tx_hash: str):
-    from database_sqlite import TransactionDB, UnTransactionDB
+    from blockchain.database import TransactionDB, UnTransactionDB
     
     txdb = TransactionDB()
     untxdb = UnTransactionDB()
@@ -145,7 +145,7 @@ async def get_transaction(tx_hash: str):
 
 @router.get("/pending")
 async def get_pending_transactions():
-    from database_sqlite import UnTransactionDB
+    from blockchain.database import UnTransactionDB
     
     untxdb = UnTransactionDB()
     pending = untxdb.find_all()
@@ -166,7 +166,7 @@ async def get_pending_transactions():
 
 @router.get("/address/{address}")
 async def get_address_transactions(address: str):
-    from database_sqlite import TransactionDB, UnTransactionDB
+    from blockchain.database import TransactionDB, UnTransactionDB
     
     txdb = TransactionDB()
     untxdb = UnTransactionDB()

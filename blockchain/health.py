@@ -44,7 +44,7 @@ class NodeHealthMonitor:
                 cprint("ERROR", f"Health check error: {e}")
 
     def _ping_all_nodes(self):
-        from database_sqlite import NodeDB
+        from blockchain.database import NodeDB
         ndb = NodeDB()
         nodes = ndb.find_all()
 
@@ -109,12 +109,12 @@ class NodeHealthMonitor:
             self._mark_node_dead(address)
 
     def _mark_node_dead(self, address):
-        from database_sqlite import NodeDB
+        from blockchain.database import NodeDB
         ndb = NodeDB()
         ndb.set_alive(address, False)
 
     def _remove_node(self, address):
-        from database_sqlite import NodeDB
+        from blockchain.database import NodeDB
         ndb = NodeDB()
         ndb.remove(address)
         cprint("INFO", f"Removed dead node: {address}")
@@ -129,12 +129,12 @@ class NodeHealthMonitor:
         return success
 
     def get_node_status(self, address):
-        from database_sqlite import NodeDB
+        from blockchain.database import NodeDB
         ndb = NodeDB()
         return ndb.get_node_status(address)
 
     def get_all_status(self):
-        from database_sqlite import NodeDB
+        from blockchain.database import NodeDB
         ndb = NodeDB()
         return ndb.get_all_node_status()
 

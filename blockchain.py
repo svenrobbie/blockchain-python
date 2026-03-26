@@ -80,7 +80,7 @@ Examples:
 def cmd_start(args):
     import web.main
     import uvicorn
-    import node
+    from blockchain import node
     
     print(colored("\n=== Starting Blockchain Python ===", "cyan", bold=True))
     print(colored("Initializing node...", "white"))

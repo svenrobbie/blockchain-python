@@ -164,7 +164,7 @@ class NodeDiscovery:
                 cprint("ERROR", f"Discovery loop error: {e}")
 
     def _add_discovered_node(self, node_info):
-        from database_sqlite import NodeDB
+        from blockchain.database import NodeDB
         ndb = NodeDB()
         existing = ndb.find_all()
         addresses = [n['address'] if isinstance(n, dict) else n for n in existing]

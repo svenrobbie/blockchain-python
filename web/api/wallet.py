@@ -1,7 +1,11 @@
 # coding:utf-8
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+web_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(web_dir))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -23,7 +27,7 @@ class SendRequest(BaseModel):
 
 @router.get("/accounts")
 async def get_accounts():
-    from account import get_accounts
+    from blockchain.account import get_accounts
     
     accounts = get_accounts()
     return {
@@ -41,7 +45,7 @@ async def get_accounts():
 
 @router.get("/account")
 async def get_current_account():
-    from account import get_account
+    from blockchain.account import get_account
     
     account = get_account()
     if not account:
@@ -59,7 +63,7 @@ async def get_current_account():
 
 @router.get("/balance/{address}")
 async def get_balance(address: str):
-    from transaction import Vout
+    from blockchain.transaction import Vout
     
     unspent = Vout.get_unspent(address)
     balance = sum(vout.amount for vout in unspent)
@@ -68,8 +72,8 @@ async def get_balance(address: str):
 
 @router.get("/balance")
 async def get_current_balance():
-    from account import get_account
-    from transaction import Vout
+    from blockchain.account import get_account
+    from blockchain.transaction import Vout
     
     account = get_account()
     if not account:
@@ -82,7 +86,7 @@ async def get_current_balance():
 
 @router.post("/create")
 async def create_wallet(request: CreateWalletRequest):
-    from account import new_account
+    from blockchain.account import new_account
     
     try:
         private_key, public_key, address = new_account(request.password)
@@ -97,9 +101,9 @@ async def create_wallet(request: CreateWalletRequest):
 
 @router.post("/send")
 async def send_coins(request: SendRequest):
-    from transaction import Transaction
-    from database_sqlite import AccountDB
-    from exceptions import (
+    from blockchain.transaction import Transaction
+    from blockchain.database import AccountDB
+    from blockchain.exceptions import (
         ValidationError, DoubleSpendError, InvalidAddressError,
         InsufficientFundsError, AmountError, UTXONotFoundError,
         WalletLockedError
@@ -173,7 +177,7 @@ async def send_coins(request: SendRequest):
 
 @router.post("/login/{index}")
 async def login_account(index: int):
-    from account import login, get_accounts
+    from blockchain.account import login, get_accounts
     
     accounts = get_accounts()
     if index < 1 or index > len(accounts):
@@ -187,7 +191,7 @@ async def login_account(index: int):
 
 @router.post("/logout")
 async def logout_account():
-    from account import logout
+    from blockchain.account import logout
     
     logout()
     return {"success": True}

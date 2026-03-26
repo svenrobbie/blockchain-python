@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/node", tags=["node"])
 
 @router.get("/status")
 async def get_node_status():
-    from database_sqlite import NodeDB, TransactionDB, BlockChainDB
+    from blockchain.database import NodeDB, TransactionDB, BlockChainDB
     
     ndb = NodeDB()
     txdb = TransactionDB()
@@ -44,7 +44,7 @@ async def get_node_status():
 
 @router.get("/peers")
 async def get_peers():
-    from database_sqlite import NodeDB
+    from blockchain.database import NodeDB
     
     ndb = NodeDB()
     nodes = ndb.find_all_with_health()
@@ -63,7 +63,7 @@ async def get_peers():
 
 @router.post("/add")
 async def add_peer(address: str):
-    from node import add_node
+    from blockchain.node import add_node
     
     try:
         result = add_node(address)
@@ -74,7 +74,7 @@ async def add_peer(address: str):
 
 @router.get("/stats")
 async def get_stats():
-    from database_sqlite import BlockChainDB, TransactionDB, UnTransactionDB
+    from blockchain.database import BlockChainDB, TransactionDB, UnTransactionDB
     
     bcdb = BlockChainDB()
     txdb = TransactionDB()

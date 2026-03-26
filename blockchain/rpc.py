@@ -1,7 +1,7 @@
 # coding:utf-8
 from xmlrpc.server import SimpleXMLRPCServer  
 from xmlrpc.client import ServerProxy
-from database_sqlite import BlockChainDB, UnTransactionDB, TransactionDB
+from blockchain.database import BlockChainDB, UnTransactionDB, TransactionDB
 from lib.common import cprint
 server = None
 
@@ -25,7 +25,7 @@ class RpcServer():
         return bcdb.find_all()
 
     def new_block(self,block):
-        from block import Block
+        from blockchain.block import Block
         cprint('RPC', block)
         
         chain = BlockChainDB().find_all()
@@ -57,7 +57,7 @@ class RpcServer():
         return True
 
     def add_node(self, address):
-        import node
+        from blockchain import node
         node.add_node(address)
         return True
 
@@ -100,7 +100,7 @@ def start_server(ip, port=8301):
     server.serve_forever()
 
 def get_clients():
-    import node
+    from blockchain import node
     clients = []
     nodes = node.get_nodes()
 

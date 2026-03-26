@@ -1,8 +1,8 @@
 # coding:utf-8
 import hashlib
 import time
-from model import Model
-from rpc import BroadCast
+from blockchain.model import Model
+from blockchain.rpc import BroadCast
 
 class Block(Model):
 
