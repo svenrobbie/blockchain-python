@@ -11,6 +11,10 @@ import account as account_module
 import transaction
 import database_sqlite
 import block as block_module
+from exceptions import (
+    ValidationError, DoubleSpendError, InvalidAddressError,
+    InsufficientFundsError, AmountError, UTXONotFoundError
+)
 
 
 BANNER = """
@@ -52,7 +56,7 @@ class BlockchainCLI:
 
         while self.running:
             try:
-                cmd = input(self.PROMPT).strip()
+                cmd = input(self.get_prompt()).strip()
                 if cmd:
                     self.handle_command(cmd)
             except KeyboardInterrupt:
@@ -69,39 +73,14 @@ class BlockchainCLI:
 
         print(colored("\nGoodbye! Keep on blockchainin'!", "yellow"))
 
-    def handle_command(self, cmd):
-        parts = cmd.split()
-        if not parts:
-            return
-
-        command = parts[0].lower()
-        args = parts[1:]
-
-        commands = {
-            "help": self.cmd_help,
-            "exit": self.cmd_exit,
-            "quit": self.cmd_exit,
-            "clear": self.cmd_clear,
-            "node": self.cmd_node,
-            "miner": self.cmd_miner,
-            "mine": self.cmd_mine,
-            "wallet": self.cmd_wallet,
-            "account": self.cmd_wallet,
-            "tx": self.cmd_tx,
-            "transaction": self.cmd_tx,
-            "send": self.cmd_send,
-            "chain": self.cmd_chain,
-            "blockchain": self.cmd_chain,
-            "pending": self.cmd_pending,
-            "status": self.cmd_status,
-            "dashboard": self.cmd_dashboard,
-        }
-
-        if command in commands:
-            commands[command](args)
-        else:
-            print(colored(f"Unknown command: {command}", "red"))
-            print(colored("Type 'help' for available commands", "yellow"))
+    def get_prompt(self):
+        account = account_module.get_account()
+        if account:
+            accounts = account_module.get_accounts()
+            for i, acc in enumerate(accounts, 1):
+                if acc['address'] == account['address'] and acc.get('is_active'):
+                    return f"blockchain[{i}]> "
+        return self.PROMPT
 
     def handle_command(self, cmd):
         parts = cmd.split()
@@ -129,6 +108,8 @@ class BlockchainCLI:
             "pending": self.cmd_pending,
             "status": self.cmd_status,
             "dashboard": self.cmd_dashboard,
+            "login": self.cmd_login,
+            "logout": self.cmd_logout,
         }
 
         if command in commands:
@@ -144,7 +125,11 @@ class BlockchainCLI:
         print("  wallet create         - Create a new wallet")
         print("  wallet address        - Show current account address")
         print("  wallet balance        - Show account balance")
-        print("  wallet list          - List all accounts")
+        print("  wallet list          - List all accounts (with index)")
+        
+        print(colored("\nLogin", "cyan", bold=True))
+        print("  login <index>         - Switch to account by index")
+        print("  logout               - Logout from current account")
         
         print(colored("\nNode", "cyan", bold=True))
         print("  node start <port>     - Start node server (default: 3009)")
@@ -182,6 +167,39 @@ class BlockchainCLI:
         if self.mining:
             self.stop_mining()
         self.running = False
+
+    def cmd_login(self, args):
+        if not args:
+            print(colored("Usage: login <index>", "yellow"))
+            return
+        
+        try:
+            index = int(args[0])
+        except ValueError:
+            print(colored("Please provide a valid account index (number)", "red"))
+            return
+        
+        accounts = account_module.get_accounts()
+        if index < 1 or index > len(accounts):
+            print(colored(f"Invalid index. Available: 1-{len(accounts)}", "red"))
+            return
+        
+        if account_module.login(index):
+            account = accounts[index - 1]
+            print(colored(f"\nLogged in to account {index}", "green", bold=True))
+            print(f"Address: {colored(account['address'], 'cyan')}")
+        else:
+            print(colored("Login failed", "red"))
+
+    def cmd_logout(self, args):
+        account = account_module.get_account()
+        if not account:
+            print(colored("No account is currently logged in", "yellow"))
+            return
+        
+        account_module.logout()
+        print(colored("Logged out successfully", "green"))
+        print(colored("Create or login to an account to continue", "yellow"))
 
     def cmd_clear(self, args):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -482,8 +500,13 @@ class BlockchainCLI:
     def wallet_address(self):
         account = account_module.get_account()
         if account:
-            print(colored("\n=== Current Account ===", "cyan", bold=True))
-            print(f"Address: {colored(account['address'], 'cyan', bold=True)}")
+            accounts = account_module.get_accounts()
+            for i, acc in enumerate(accounts, 1):
+                if acc['address'] == account['address']:
+                    print(colored("\n=== Current Account ===", "cyan", bold=True))
+                    print(f"Index:   {colored(str(i), 'yellow')}")
+                    print(f"Address: {colored(account['address'], 'cyan', bold=True)}")
+                    return
         else:
             print(colored("No account found. Create one with 'wallet create'", "yellow"))
 
@@ -499,16 +522,17 @@ class BlockchainCLI:
         print(f"Balance: {colored(str(balance), 'green', bold=True)} coins")
 
     def wallet_list(self):
-        adb = database_sqlite.AccountDB()
-        accounts = adb.find_all()
+        accounts = account_module.get_accounts()
         print(colored("\n=== All Accounts ===", "cyan", bold=True))
         if accounts:
             for i, acc in enumerate(accounts, 1):
                 balance = self.get_balance(acc['address'])
-                print(f"\n{i}. {colored(acc['address'][:30] + '...', 'cyan')}")
+                active_marker = colored(" <-- active", "green", bold=True) if acc.get('is_active') else ""
+                print(f"\n{i}. {colored(acc['address'][:30] + '...', 'cyan')}{active_marker}")
                 print(f"   Balance: {colored(str(balance), 'green')} coins")
         else:
             print(colored("No accounts found", "yellow"))
+        print(colored("\n  Use 'login <index>' to switch accounts", "dim"))
 
     def get_balance(self, address):
         unspent = transaction.Vout.get_unspent(address)
@@ -553,15 +577,11 @@ class BlockchainCLI:
     def tx_send(self, to_address, amount):
         account = account_module.get_account()
         if not account:
-            print(colored("No account found. Create one with 'wallet create'", "yellow"))
+            print(colored("No account found. Create one with 'wallet create' or 'login <index>'", "yellow"))
             return
 
         from_address = account['address']
         balance = self.get_balance(from_address)
-
-        if balance < amount:
-            print(colored(f"Insufficient balance! You have {balance} coins", "red"))
-            return
 
         print(colored(f"\nSending {amount} coins to {to_address}...", "cyan"))
         print(f"From: {colored(from_address, 'white')}")
@@ -575,8 +595,27 @@ class BlockchainCLI:
             print(f"TX Hash: {colored(tx_dict['hash'], 'cyan')}")
             print(colored("\nTransaction is pending. It will be mined soon.", "yellow"))
             transaction.Transaction.unblock_spread(tx_dict)
+        except InsufficientFundsError as e:
+            print(colored(f"\nError: Insufficient funds!", "red", bold=True))
+            print(colored(f"  {e}", "red"))
+            print(f"  Your balance: {colored(str(balance), 'yellow')} coins")
+        except InvalidAddressError as e:
+            print(colored(f"\nError: Invalid address!", "red", bold=True))
+            print(colored(f"  {e}", "red"))
+        except DoubleSpendError as e:
+            print(colored(f"\nError: Double spend detected!", "red", bold=True))
+            print(colored(f"  {e}", "red"))
+        except AmountError as e:
+            print(colored(f"\nError: Invalid amount!", "red", bold=True))
+            print(colored(f"  {e}", "red"))
+        except UTXONotFoundError as e:
+            print(colored(f"\nError: UTXO not found!", "red", bold=True))
+            print(colored(f"  {e}", "red"))
+        except ValidationError as e:
+            print(colored(f"\nError: Validation failed!", "red", bold=True))
+            print(colored(f"  {e}", "red"))
         except Exception as e:
-            print(colored(f"Transaction failed: {e}", "red"))
+            print(colored(f"\nTransaction failed: {e}", "red"))
 
     def tx_pending(self):
         untxdb = database_sqlite.UnTransactionDB()

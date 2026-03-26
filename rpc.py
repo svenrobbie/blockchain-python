@@ -83,12 +83,14 @@ class BroadCast():
             rs = []
             for c in cs:
                 try:
-                    rs.append(getattr(c,name)(*args, **kw))
+                    result = getattr(c, name)(*args, **kw)
+                    rs.append(result)
+                    cprint('INFO', 'Contact with node %s successful calling method %s .' % (c.node, name))
                 except ConnectionRefusedError:
-                    cprint('WARN', 'Contact with node %s failed when calling method %s , please check the node.' % (c.node,name))
-                else:
-                    cprint('INFO', 'Contact with node %s successful calling method %s .' % (c.node,name))
-            return rs
+                    cprint('WARN', 'Contact with node %s failed when calling method %s , please check the node.' % (c.node, name))
+                except Exception as e:
+                    cprint('WARN', 'Error contacting node %s: %s' % (c.node, str(e)))
+            return rs if rs else True
         return noname
 
 def start_server(ip, port=8301):

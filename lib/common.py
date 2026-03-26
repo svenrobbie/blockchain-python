@@ -230,3 +230,46 @@ def decode(string, base):
         result += extract(string[0], code_string)
         string = string[1:]
     return result    
+
+
+def is_valid_address(address):
+    if not isinstance(address, str):
+        return False
+    
+    if len(address) < 26 or len(address) > 35:
+        return False
+    
+    valid_chars = code_strings[58]
+    for char in address:
+        if char not in valid_chars:
+            return False
+    
+    try:
+        leading_ones = 0
+        for char in address:
+            if char == '1':
+                leading_ones += 1
+            else:
+                break
+        
+        decoded_with_leading = changebase(address, 58, 256)
+        
+        leading_zeros = b'\x00' * leading_ones
+        decoded = leading_zeros + decoded_with_leading
+        
+        if len(decoded) < 25:
+            return False
+        
+        checksum = decoded[-4:]
+        payload = decoded[:-4]
+        expected_checksum = bin_dbl_sha256(payload)[:4]
+        
+        return checksum == expected_checksum
+    except Exception:
+        return False
+
+
+def verify_signature(data, signature, pubkey):
+    expected_sig = lock_sig(unlock_sig(signature.split(':')[0] if ':' in signature else signature, pubkey), pubkey)
+    actual_sig = signature.split(':')[1] if ':' in signature else signature
+    return expected_sig == actual_sig

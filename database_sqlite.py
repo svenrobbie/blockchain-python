@@ -78,10 +78,16 @@ class SQLiteDB:
             CREATE TABLE IF NOT EXISTS accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 address TEXT UNIQUE NOT NULL,
-                pubkey TEXT
+                pubkey TEXT,
+                is_active INTEGER DEFAULT 0
             )
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_account_address ON accounts(address)')
+        
+        cursor.execute("PRAGMA table_info(accounts)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'is_active' not in columns:
+            cursor.execute('ALTER TABLE accounts ADD COLUMN is_active INTEGER DEFAULT 0')
 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS nodes (
@@ -352,24 +358,59 @@ class AccountDB:
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM accounts ORDER BY id')
         rows = cursor.fetchall()
-        return [{'address': row['address'], 'pubkey': row['pubkey']} for row in rows]
+        return [{'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 'is_active': row['is_active']} for row in rows]
 
     def find_one(self):
         cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM accounts WHERE is_active = 1 LIMIT 1')
+        row = cursor.fetchone()
+        if row:
+            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 'is_active': row['is_active']}
         cursor.execute('SELECT * FROM accounts ORDER BY id LIMIT 1')
         row = cursor.fetchone()
         if row:
-            return {'address': row['address'], 'pubkey': row['pubkey']}
+            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 'is_active': row['is_active']}
         return None
+
+    def find_by_index(self, index):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM accounts ORDER BY id LIMIT 1 OFFSET ?', (index - 1,))
+        row = cursor.fetchone()
+        if row:
+            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 'is_active': row['is_active']}
+        return None
+
+    def find_by_address(self, address):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM accounts WHERE address = ?', (address,))
+        row = cursor.fetchone()
+        if row:
+            return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 'is_active': row['is_active']}
+        return None
+
+    def set_active(self, account_id):
+        cursor = self.conn.cursor()
+        cursor.execute('UPDATE accounts SET is_active = 0')
+        cursor.execute('UPDATE accounts SET is_active = 1 WHERE id = ?', (account_id,))
+        self.conn.commit()
+
+    def clear_active(self):
+        cursor = self.conn.cursor()
+        cursor.execute('UPDATE accounts SET is_active = 0')
+        self.conn.commit()
 
     def insert(self, account):
         cursor = self.conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM accounts')
+        count = cursor.fetchone()[0]
+        is_active = 1 if count == 0 else 0
         cursor.execute('''
-            INSERT OR IGNORE INTO accounts (address, pubkey)
-            VALUES (?, ?)
+            INSERT OR IGNORE INTO accounts (address, pubkey, is_active)
+            VALUES (?, ?, ?)
         ''', (
             account['address'],
-            account.get('pubkey', '')
+            account.get('pubkey', ''),
+            is_active
         ))
         self.conn.commit()
 
@@ -383,11 +424,12 @@ class AccountDB:
         cursor.execute('DELETE FROM accounts')
         for acc in accounts:
             cursor.execute('''
-                INSERT INTO accounts (address, pubkey)
-                VALUES (?, ?)
+                INSERT INTO accounts (address, pubkey, is_active)
+                VALUES (?, ?, ?)
             ''', (
                 acc['address'],
-                acc.get('pubkey', '')
+                acc.get('pubkey', ''),
+                acc.get('is_active', 0)
             ))
         self.conn.commit()
 
