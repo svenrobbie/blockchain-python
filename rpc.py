@@ -9,12 +9,17 @@ PORT = 8301
 
 class RpcServer():
 
-    def __init__(self,server):
+    VERSION = "1.0"
+
+    def __init__(self, server):
         self.server = server
 
     def ping(self):
         return True
-    
+
+    def get_version(self):
+        return self.VERSION
+
     def get_blockchain(self):
         bcdb = BlockChainDB()
         return bcdb.find_all()
@@ -58,7 +63,7 @@ class RpcServer():
 
 class RpcClient():
 
-    ALLOW_METHOD = ['get_transactions', 'get_blockchain', 'new_block', 'new_untransaction', 'blocked_transactions', 'ping', 'add_node']
+    ALLOW_METHOD = ['get_transactions', 'get_blockchain', 'new_block', 'new_untransaction', 'blocked_transactions', 'ping', 'add_node', 'get_version']
 
     def __init__(self, node):
         self.node = node

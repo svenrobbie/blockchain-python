@@ -2,6 +2,7 @@
 import sqlite3
 import json
 import os
+import time
 
 DATABASE_PATH = 'data/blockchain.db'
 
@@ -31,11 +32,25 @@ class SQLiteDB:
                 previous_block TEXT,
                 nonce INTEGER,
                 difficulty INTEGER DEFAULT 5,
-                tx_hashes TEXT
+                tx_hashes TEXT,
+                fees_collected INTEGER DEFAULT 0
             )
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocks_hash ON blocks(hash)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocks_index ON blocks(block_index)')
+        
+        try:
+            cursor.execute('ALTER TABLE blocks ADD COLUMN fees_collected INTEGER DEFAULT 0')
+        except:
+            pass
+        
+        cursor.execute("PRAGMA table_info(blocks)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'fees_collected' not in columns:
+            try:
+                cursor.execute('ALTER TABLE blocks ADD COLUMN fees_collected INTEGER DEFAULT 0')
+            except:
+                pass
 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS transactions (
@@ -71,10 +86,21 @@ class SQLiteDB:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS nodes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                address TEXT UNIQUE NOT NULL
+                address TEXT UNIQUE NOT NULL,
+                last_seen INTEGER DEFAULT 0,
+                is_alive INTEGER DEFAULT 1
             )
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_node_address ON nodes(address)')
+        
+        try:
+            cursor.execute('ALTER TABLE nodes ADD COLUMN last_seen INTEGER DEFAULT 0')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE nodes ADD COLUMN is_alive INTEGER DEFAULT 1')
+        except:
+            pass
 
         conn.commit()
 
@@ -104,8 +130,8 @@ class BlockChainDB:
     def insert(self, block):
         cursor = self.conn.cursor()
         cursor.execute('''
-            INSERT OR IGNORE INTO blocks (hash, block_index, timestamp, previous_block, nonce, difficulty, tx_hashes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO blocks (hash, block_index, timestamp, previous_block, nonce, difficulty, tx_hashes, fees_collected)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             block['hash'],
             block['index'],
@@ -113,7 +139,8 @@ class BlockChainDB:
             block.get('previous_block', ''),
             block.get('nouce', 0),
             block.get('difficulty', 5),
-            json.dumps(block.get('tx', []))
+            json.dumps(block.get('tx', [])),
+            block.get('fees_collected', 0)
         ))
         self.conn.commit()
 
@@ -127,8 +154,8 @@ class BlockChainDB:
         cursor.execute('DELETE FROM blocks')
         for block in blocks:
             cursor.execute('''
-                INSERT INTO blocks (hash, block_index, timestamp, previous_block, nonce, difficulty, tx_hashes)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO blocks (hash, block_index, timestamp, previous_block, nonce, difficulty, tx_hashes, fees_collected)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 block['hash'],
                 block['index'],
@@ -136,13 +163,19 @@ class BlockChainDB:
                 block.get('previous_block', ''),
                 block.get('nouce', 0),
                 block.get('difficulty', 5),
-                json.dumps(block.get('tx', []))
+                json.dumps(block.get('tx', [])),
+                block.get('fees_collected', 0)
             ))
         self.conn.commit()
 
     def _row_to_block_dict(self, row):
         if not row:
             return {}
+        fees = 0
+        try:
+            fees = row['fees_collected'] if row['fees_collected'] else 0
+        except (KeyError, IndexError):
+            fees = 0
         return {
             'hash': row['hash'],
             'index': row['block_index'],
@@ -150,7 +183,8 @@ class BlockChainDB:
             'previous_block': row['previous_block'],
             'nouce': row['nonce'],
             'difficulty': row['difficulty'],
-            'tx': json.loads(row['tx_hashes']) if row['tx_hashes'] else []
+            'tx': json.loads(row['tx_hashes']) if row['tx_hashes'] else [],
+            'fees_collected': fees
         }
 
 
@@ -368,12 +402,70 @@ class NodeDB:
         rows = cursor.fetchall()
         return [row['address'] for row in rows]
 
+    def find_all_with_health(self):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM nodes ORDER BY id')
+        rows = cursor.fetchall()
+        return [{
+            'address': row['address'],
+            'last_seen': row['last_seen'] or 0,
+            'is_alive': bool(row['is_alive']) if row['is_alive'] else False
+        } for row in rows]
+
+    def find_alive(self):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT address FROM nodes WHERE is_alive = 1 ORDER BY id')
+        rows = cursor.fetchall()
+        return [row['address'] for row in rows]
+
     def insert(self, node):
         cursor = self.conn.cursor()
         cursor.execute('''
             INSERT OR IGNORE INTO nodes (address)
             VALUES (?)
         ''', (node,))
+        self.conn.commit()
+
+    def insert_with_health(self, address):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            INSERT OR IGNORE INTO nodes (address, last_seen, is_alive)
+            VALUES (?, ?, ?)
+        ''', (address, int(time.time()), 1))
+        self.conn.commit()
+
+    def update_last_seen(self, address):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE nodes SET last_seen = ?, is_alive = 1 WHERE address = ?
+        ''', (int(time.time()), address))
+        self.conn.commit()
+
+    def set_alive(self, address, alive=True):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE nodes SET is_alive = ? WHERE address = ?
+        ''', (1 if alive else 0, address))
+        self.conn.commit()
+
+    def get_node_status(self, address):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM nodes WHERE address = ?', (address,))
+        row = cursor.fetchone()
+        if row:
+            return {
+                'address': row['address'],
+                'last_seen': row['last_seen'] or 0,
+                'is_alive': bool(row['is_alive']) if row['is_alive'] else False
+            }
+        return None
+
+    def get_all_node_status(self):
+        return self.find_all_with_health()
+
+    def remove(self, address):
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM nodes WHERE address = ?', (address,))
         self.conn.commit()
 
     def clear(self):
@@ -385,8 +477,14 @@ class NodeDB:
         cursor = self.conn.cursor()
         cursor.execute('DELETE FROM nodes')
         for node in nodes:
-            cursor.execute('''
-                INSERT INTO nodes (address)
-                VALUES (?)
-            ''', (node,))
+            if isinstance(node, dict):
+                cursor.execute('''
+                    INSERT INTO nodes (address, last_seen, is_alive)
+                    VALUES (?, ?, ?)
+                ''', (node['address'], node.get('last_seen', 0), 1 if node.get('is_alive', True) else 0))
+            else:
+                cursor.execute('''
+                    INSERT INTO nodes (address)
+                    VALUES (?)
+                ''', (node,))
         self.conn.commit()

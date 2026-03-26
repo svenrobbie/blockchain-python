@@ -17,6 +17,7 @@ class Block(Model):
         self.tx = tx
         self.previous_block = previous_hash
         self.difficulty = difficulty
+        self.fees_collected = 0
 
     def header_hash(self):
         """
@@ -87,6 +88,7 @@ class Block(Model):
                 bdict.get('difficulty', 5))
         b.hash = bdict['hash']
         b.nouce = bdict['nouce']
+        b.fees_collected = bdict.get('fees_collected', 0)
         return b
 
     @staticmethod

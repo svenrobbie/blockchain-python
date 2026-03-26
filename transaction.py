@@ -6,6 +6,8 @@ from model import Model
 from database_sqlite import TransactionDB, UnTransactionDB
 from rpc import BroadCast
 
+MIN_FEE = 1  # Mandatory minimum fee per transaction
+
 class Vin(Model):
     def __init__(self, utxo_hash, amount):
         self.hash = utxo_hash
@@ -49,20 +51,36 @@ class Transaction():
         return hashlib.sha256((str(self.timestamp) + str(self.vin) + str(self.vout)).encode('utf-8')).hexdigest()
 
     @classmethod
-    def transfer(cls, from_addr, to_addr, amount):
-        if not isinstance(amount,int):
+    def transfer(cls, from_addr, to_addr, amount, fee=MIN_FEE):
+        if not isinstance(amount, int):
             amount = int(amount)
+        
+        actual_fee = max(fee, MIN_FEE)  # Enforce minimum fee
+        total_needed = amount + actual_fee
+        
         unspents = Vout.get_unspent(from_addr)
-        ready_utxo, change = select_outputs_greedy(unspents, amount)
-        print('ready_utxo', ready_utxo[0].to_dict())
+        ready_utxo, change = select_outputs_greedy(unspents, total_needed)
+        
+        if not ready_utxo:
+            raise Exception("Insufficient funds")
+        
         vin = ready_utxo
         vout = []
         vout.append(Vout(to_addr, amount))
-        vout.append(Vout(from_addr, change))
+        
+        change_amount = change - actual_fee
+        if change_amount > 0:
+            vout.append(Vout(from_addr, change_amount))
+        
         tx = cls(vin, vout)
         tx_dict = tx.to_dict()
+        tx_dict['fee'] = actual_fee
         UnTransactionDB().insert(tx_dict)
         return tx_dict
+
+    @staticmethod
+    def get_fee(tx):
+        return tx.get('fee', MIN_FEE)
 
     @staticmethod
     def unblock_spread(untx):
@@ -83,19 +101,16 @@ class Transaction():
         return dt
 
 def select_outputs_greedy(unspent, min_value): 
-    if not unspent: return None 
-    # 分割成两个列表。
+    if not unspent: 
+        return None, 0 
     lessers = [utxo for utxo in unspent if utxo.amount < min_value] 
     greaters = [utxo for utxo in unspent if utxo.amount >= min_value] 
     key_func = lambda utxo: utxo.amount
     greaters.sort(key=key_func)
     if greaters: 
-        # 非空。寻找最小的greater。
         min_greater = greaters[0]
         change = min_greater.amount - min_value 
         return [min_greater], change
-    # 没有找到greaters。重新尝试若干更小的。
-    # 从大到小排序。我们需要尽可能地使用最小的输入量。
     lessers.sort(key=key_func, reverse=True)
     result = []
     accum = 0
@@ -105,5 +120,4 @@ def select_outputs_greedy(unspent, min_value):
         if accum >= min_value: 
             change = accum - min_value
             return result, change 
-    # 没有找到。
     return None, 0

@@ -2,6 +2,7 @@
 import sys
 import time
 import threading
+import os
 from lib.common import colored, cprint
 
 import node
@@ -12,6 +13,24 @@ import database_sqlite
 import block as block_module
 
 
+BANNER = """
+ +------------------------------------------------------------+
+ |                                                            |
+ |   BBBBB    L      OOOOO   CCCCC  KKKK   KKKK  CCCCCC  HHHH  |
+ |   BB  BB   L      OO  OO  CC      KK K  KK KK  CC       HHHH |
+ |   BBBBBB   L      OO  OO  CC      KKKK   KKKK  CC       HHHH |
+ |   BB  BB   L      OO  OO  CC      KK KK  KK KK  CC       HHHH |
+ |   BBBBB    LLLLL   OOOO   CCCCC  KK  K  KK  K  CCCCC  HHHH |
+ |                                                            |
+ |   P     Y     TTTTT  H     H  OOO   N    N                 |
+ |   P     Y       T    H     H  O  O  NN   N                 |
+ |   PPPPPPY       T    HHHHHHH  O  O  N N  N                 |
+ |   P     Y       T    H     H  OOOO  N  N N                 |
+ |                                                            |
+ +------------------------------------------------------------+
+"""
+
+
 class BlockchainCLI:
     PROMPT = "blockchain> "
 
@@ -19,13 +38,17 @@ class BlockchainCLI:
         self.running = True
         self.mining = False
         self.mining_thread = None
+        self.dashboard_thread = None
+        self.dashboard_running = False
 
     def start(self):
-        print(colored("\n=== Blockchain CLI ===", "cyan", bold=True))
-        print(colored("Type 'help' for commands\n", "white"))
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(colored(BANNER, "cyan"))
+        print(colored("  Welcome to Blockchain Python v1.0!", "yellow", bold=True))
+        print(colored("  Type 'help' for commands or 'dashboard' for live view\n", "white"))
 
         node.init_node()
-        cprint("INFO", "Node initialized")
+        print(colored("  [", "white") + colored("OK", "green") + colored("] Node initialized\n", "white"))
 
         while self.running:
             try:
@@ -36,13 +59,15 @@ class BlockchainCLI:
                 print("\n")
                 if self.mining:
                     self.stop_mining()
+                if self.dashboard_running:
+                    self.stop_dashboard()
                 break
             except EOFError:
                 break
             except Exception as e:
                 print(colored(f"Error: {e}", "red"))
 
-        print(colored("Goodbye!", "yellow"))
+        print(colored("\nGoodbye! Keep on blockchainin'!", "yellow"))
 
     def handle_command(self, cmd):
         parts = cmd.split()
@@ -69,6 +94,41 @@ class BlockchainCLI:
             "blockchain": self.cmd_chain,
             "pending": self.cmd_pending,
             "status": self.cmd_status,
+            "dashboard": self.cmd_dashboard,
+        }
+
+        if command in commands:
+            commands[command](args)
+        else:
+            print(colored(f"Unknown command: {command}", "red"))
+            print(colored("Type 'help' for available commands", "yellow"))
+
+    def handle_command(self, cmd):
+        parts = cmd.split()
+        if not parts:
+            return
+
+        command = parts[0].lower()
+        args = parts[1:]
+
+        commands = {
+            "help": self.cmd_help,
+            "exit": self.cmd_exit,
+            "quit": self.cmd_exit,
+            "clear": self.cmd_clear,
+            "node": self.cmd_node,
+            "miner": self.cmd_miner,
+            "mine": self.cmd_mine,
+            "wallet": self.cmd_wallet,
+            "account": self.cmd_wallet,
+            "tx": self.cmd_tx,
+            "transaction": self.cmd_tx,
+            "send": self.cmd_send,
+            "chain": self.cmd_chain,
+            "blockchain": self.cmd_chain,
+            "pending": self.cmd_pending,
+            "status": self.cmd_status,
+            "dashboard": self.cmd_dashboard,
         }
 
         if command in commands:
@@ -89,7 +149,10 @@ class BlockchainCLI:
         print(colored("\nNode", "cyan", bold=True))
         print("  node start <port>     - Start node server (default: 3009)")
         print("  node add <address>    - Add peer node")
-        print("  node list            - List connected nodes")
+        print("  node list            - List nodes with health status")
+        print("  node status          - Show node statistics")
+        print("  node discover        - Discover nodes via mDNS")
+        print("  node ping <addr>     - Ping a specific node")
         
         print(colored("\nMining", "cyan", bold=True))
         print("  mine                 - Start mining (foreground)")
@@ -110,6 +173,7 @@ class BlockchainCLI:
         
         print(colored("\nGeneral", "cyan", bold=True))
         print("  help                 - Show this help")
+        print("  dashboard            - Live updating status view")
         print("  status               - Show overall status")
         print("  clear                - Clear screen")
         print("  exit                 - Exit CLI")
@@ -120,7 +184,96 @@ class BlockchainCLI:
         self.running = False
 
     def cmd_clear(self, args):
-        print("\033[2J\033[H", end="")
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(colored(BANNER, "cyan"))
+        print(colored("  Welcome to Blockchain Python v1.0!", "yellow", bold=True))
+        print(colored("  Type 'help' for commands or 'dashboard' for live view\n", "white"))
+
+    def cmd_dashboard(self, args):
+        if self.dashboard_running:
+            print(colored("Dashboard already running! Press Ctrl+C to exit.", "yellow"))
+            return
+        
+        print(colored("\n+==============================================================+", "cyan"))
+        print(colored("|              LIVE BLOCKCHAIN DASHBOARD                       |", "cyan"))
+        print(colored("+==============================================================+", "cyan"))
+        print(colored("  Press Ctrl+C to return to CLI\n", "white"))
+        
+        self.dashboard_running = True
+        self.dashboard_thread = threading.Thread(target=self._dashboard_loop, daemon=True)
+        self.dashboard_thread.start()
+
+    def _dashboard_loop(self):
+        while self.dashboard_running:
+            self._print_dashboard()
+            time.sleep(2)
+
+    def _print_dashboard(self):
+        bcdb = database_sqlite.BlockChainDB()
+        chain = bcdb.find_all()
+        txdb = database_sqlite.TransactionDB()
+        transactions = txdb.find_all()
+        untxdb = database_sqlite.UnTransactionDB()
+        pending = untxdb.find_all()
+        account = account_module.get_account()
+        balance = self.get_balance(account['address']) if account else 0
+        
+        raw_status = node.get_node_status()
+        if not raw_status:
+            node_status = []
+        elif isinstance(raw_status, list):
+            node_status = [n for n in raw_status if isinstance(n, dict)]
+        elif isinstance(raw_status, dict):
+            node_status = [raw_status]
+        else:
+            node_status = []
+        alive_nodes = sum(1 for n in node_status if n.get('is_alive', False))
+        
+        last_block = chain[-1] if chain else None
+        block_time = time.strftime('%H:%M:%S', time.localtime(last_block['timestamp'])) if last_block else 'N/A'
+        
+        total_fees = sum(b.get('fees_collected', 0) for b in chain)
+        
+        os.system('cls' if os.name == 'nt' else 'clear')
+        
+        print(colored("+==============================================================+", "cyan"))
+        print(colored("|              LIVE BLOCKCHAIN DASHBOARD                       |", "cyan"))
+        print(colored("+==============================================================+", "cyan"))
+        print()
+        
+        print(colored("  +--------------------+  +--------------------+", "white"))
+        print(colored("  | BLOCK #: ", "white") + colored(f"{len(chain):>6}", "green", bold=True) + colored(" |  | ", "white") + 
+              colored("MINING: ", "white") + colored("ON " if self.mining else "OFF", "yellow" if self.mining else "red", bold=True) + 
+              colored("    |"))
+        print(colored("  | PENDING TX: ", "white") + colored(f"{len(pending):>4}", "yellow", bold=True) + colored(" |  | ", "white") +
+              colored("NODES: ", "white") + colored(f"{alive_nodes:>6}", "cyan", bold=True) + colored(" |"))
+        print(colored("  +--------------------+  +--------------------+", "white"))
+        print()
+        
+        print(colored("  +--------------------+  +--------------------+", "white"))
+        print(colored("  | BALANCE: ", "white") + colored(f"{balance:>6}", "green", bold=True) + 
+              colored(" coins  |  | ", "white") +
+              colored("FEES: ", "white") + colored(f"{total_fees:>6}", "yellow", bold=True) + 
+              colored(" total  |"))
+        print(colored("  | LAST BLOCK: ", "white") + colored(f"{block_time:>8}", "cyan", bold=True) + 
+              colored(" |  | ", "white") +
+              colored("CONFIRMED: ", "white") + colored(f"{len(transactions):>4}", "green", bold=True) + 
+              colored(" tx   |"))
+        print(colored("  +--------------------+  +--------------------+", "white"))
+        print()
+        
+        if last_block:
+            print(colored("  Latest Block:", "cyan", bold=True))
+            print(colored("    Hash: ", "white") + colored(f"{last_block.get('hash', 'N/A')[:30]}...", "yellow"))
+            print(colored("    Difficulty: ", "white") + colored(f"{last_block.get('difficulty', 5)}", "cyan") + 
+                  colored(" zeros | Nonce: ", "white") + colored(f"{last_block.get('nouce', 0):,}", "cyan"))
+            print(colored("    Transactions: ", "white") + colored(f"{len(last_block.get('tx', []))}", "green"))
+        
+        print()
+        print(colored("  Press Ctrl+C to return to CLI", "dim"))
+
+    def stop_dashboard(self):
+        self.dashboard_running = False
 
     def cmd_status(self, args):
         bcdb = database_sqlite.BlockChainDB()
@@ -147,7 +300,7 @@ class BlockchainCLI:
 
     def cmd_node(self, args):
         if not args:
-            print(colored("Usage: node <start|add|list>", "yellow"))
+            print(colored("Usage: node <start|add|list|status|discover>", "yellow"))
             return
 
         subcmd = args[0].lower()
@@ -157,6 +310,9 @@ class BlockchainCLI:
             print(colored(f"Starting node on port {port}...", "cyan"))
             node.start_node(f"0.0.0.0:{port}")
             print(colored("Node started", "green"))
+            print(colored("  - RPC server started", "white"))
+            print(colored("  - mDNS discovery enabled", "white"))
+            print(colored("  - Health monitor enabled (60s interval)", "white"))
 
         elif subcmd == "add":
             if len(args) < 2:
@@ -169,13 +325,69 @@ class BlockchainCLI:
             print(colored(f"Added node: {address}", "green"))
 
         elif subcmd == "list":
-            nodes = node.get_nodes()
+            nodes = node.get_nodes_status()
             print(colored("\n=== Connected Nodes ===", "cyan", bold=True))
             if nodes:
                 for i, n in enumerate(nodes, 1):
-                    print(f"  {i}. {colored(n, 'green')}")
+                    status_color = 'green' if n['is_alive'] else 'red'
+                    status_text = 'ONLINE' if n['is_alive'] else 'OFFLINE'
+                    last_seen = n['last_seen']
+                    if last_seen > 0:
+                        from datetime import datetime
+                        last_seen_str = datetime.fromtimestamp(last_seen).strftime('%H:%M:%S')
+                    else:
+                        last_seen_str = 'Never'
+                    print(f"\n  {i}. {colored(n['address'], 'cyan')}")
+                    print(f"     Status: {colored(status_text, status_color)}")
+                    print(f"     Last seen: {colored(last_seen_str, 'yellow')}")
             else:
-                print(colored("  No nodes connected", "yellow"))
+                print(colored("  No nodes configured", "yellow"))
+
+        elif subcmd == "status":
+            status = node.get_node_status()
+            if not isinstance(status, list):
+                status = [status] if status else []
+            print(colored("\n=== Node Status ===", "cyan", bold=True))
+            alive = sum(1 for n in status if n.get('is_alive', False))
+            total = len(status)
+            print(f"  Total nodes: {colored(str(total), 'white')}")
+            print(f"  Online: {colored(str(alive), 'green')}")
+            print(f"  Offline: {colored(str(total - alive), 'red')}")
+
+        elif subcmd == "discover":
+            print(colored("\n=== Discovering Nodes ===", "cyan", bold=True))
+            print(colored("Scanning local network for Blockchain_Python nodes...", "white"))
+            try:
+                from node_discovery import auto_discover_nodes
+                discovered = auto_discover_nodes(timeout=5)
+                if discovered:
+                    print(colored(f"\nFound {len(discovered)} node(s):", "green"))
+                    for n in discovered:
+                        print(f"  - {colored(n['address'], 'cyan')} (v{n['version']})")
+                        node.add_node(n['address'])
+                else:
+                    print(colored("No nodes found on network", "yellow"))
+            except Exception as e:
+                print(colored(f"Discovery failed: {e}", "red"))
+                print(colored("Install zeroconf: pip install zeroconf", "yellow"))
+
+        elif subcmd == "ping":
+            if len(args) < 2:
+                print(colored("Usage: node ping <address>", "yellow"))
+                return
+            address = args[1]
+            if address.find('http') != 0:
+                address = 'http://' + address
+            print(colored(f"Pinging {address}...", "white"))
+            try:
+                from node_health import ping_node
+                result = ping_node(address)
+                if result:
+                    print(colored("Node is alive!", "green"))
+                else:
+                    print(colored("Node is unreachable", "red"))
+            except Exception as e:
+                print(colored(f"Ping failed: {e}", "red"))
 
         else:
             print(colored(f"Unknown node command: {subcmd}", "red"))
@@ -376,6 +588,7 @@ class BlockchainCLI:
                 print(f"   Timestamp: {tx.get('timestamp', 'N/A')}")
                 print(f"   Inputs: {len(tx.get('vin', []))}")
                 print(f"   Outputs: {len(tx.get('vout', []))}")
+                print(f"   Fee: {colored(str(tx.get('fee', 1)), 'yellow')} coins")
         else:
             print(colored("No pending transactions", "yellow"))
 
@@ -390,6 +603,7 @@ class BlockchainCLI:
                 print(colored(f"\n=== Transaction ===", "cyan", bold=True))
                 print(f"Hash: {colored(tx['hash'], 'cyan')}")
                 print(f"Timestamp: {tx.get('timestamp', 'N/A')}")
+                print(f"Fee: {colored(str(tx.get('fee', 1)), 'yellow')} coins")
                 print(f"\nInputs ({len(tx.get('vin', []))}):")
                 for vin in tx.get('vin', []):
                     print(f"  - {colored(vin.get('hash', 'N/A')[:20] + '...', 'white')} ({vin.get('amount', 0)} coins)")
@@ -455,12 +669,16 @@ class BlockchainCLI:
             return
 
         block = chain[index]
+        fees = block.get('fees_collected', 0)
+        miner_reward = 20 + fees
         print(colored(f"\n=== Block #{block['index']} ===", "cyan", bold=True))
-        print(f"Timestamp:   {block['timestamp']} ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(block['timestamp']))})")
-        print(f"Hash:        {colored(block.get('hash', 'N/A'), 'white')}")
-        print(f"Prev Hash:   {colored(block.get('previous_block', 'N/A'), 'white')}")
-        print(f"Difficulty:  {colored(str(block.get('difficulty', 5)), 'cyan')} ({block.get('difficulty', 5)} leading zeros)")
-        print(f"Nonce:       {block.get('nouce', 'N/A')}")
+        print(f"Timestamp:    {block['timestamp']} ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(block['timestamp']))})")
+        print(f"Hash:         {colored(block.get('hash', 'N/A'), 'white')}")
+        print(f"Prev Hash:    {colored(block.get('previous_block', 'N/A'), 'white')}")
+        print(f"Difficulty:   {colored(str(block.get('difficulty', 5)), 'cyan')} ({block.get('difficulty', 5)} leading zeros)")
+        print(f"Nonce:        {block.get('nouce', 'N/A')}")
+        print(f"Fees:         {colored(str(fees), 'yellow')} coins")
+        print(f"Miner reward: {colored(str(miner_reward), 'green')} coins (20 base + {fees} fees)")
         print(f"Transactions: {colored(str(len(block.get('tx', []))), 'green')}")
         for i, tx_hash in enumerate(block.get('tx', [])):
             print(f"  {i+1}. {tx_hash[:40]}...")
@@ -475,6 +693,7 @@ class BlockchainCLI:
 
         difficulties = [b.get('difficulty', 5) for b in chain]
         nonces = [b.get('nouce', 0) for b in chain]
+        total_fees = sum(b.get('fees_collected', 0) for b in chain)
 
         print(colored("\n=== Chain Info ===", "cyan", bold=True))
         print(f"Total blocks:      {colored(str(len(chain)), 'green')}")
@@ -482,6 +701,7 @@ class BlockchainCLI:
         print(f"Latest block:      {colored(chain[-1]['hash'][:20] + '...', 'white')}")
         print(f"Current difficulty: {colored(str(difficulties[-1]), 'cyan')}")
         print(f"Difficulty range:  {min(difficulties)} - {max(difficulties)}")
+        print(f"Total fees mined:  {colored(str(total_fees), 'yellow')} coins")
         print(f"Average nonce:     {sum(nonces) // len(nonces):,}")
 
         if len(chain) >= 10:

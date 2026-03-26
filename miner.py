@@ -1,7 +1,7 @@
 # coding:utf-8
 from block import Block
 import time
-from transaction import Vout, Transaction
+from transaction import Vout, Transaction, MIN_FEE
 from account import get_account
 from database_sqlite import BlockChainDB, TransactionDB, UnTransactionDB
 from lib.common import unlock_sig, lock_sig
@@ -9,22 +9,29 @@ from lib.common import unlock_sig, lock_sig
 MAX_COIN = 21000000
 REWARD = 20
 
-def reward():
-    reward = Vout(get_account()['address'], REWARD)
-    tx = Transaction([], reward)
-    return tx
+def calculate_total_fees(transactions):
+    """Calculate total fees from all transactions"""
+    return sum(tx.get('fee', MIN_FEE) for tx in transactions)
+
+def reward_with_fees(total_fees):
+    """Create reward transaction with base reward + fees"""
+    reward_amount = REWARD + total_fees
+    return Vout(get_account()['address'], reward_amount)
 
 def coinbase():
     """
     First block generate.
     """
-    rw = reward()
-    cb = Block(0, int(time.time()), [rw.hash], "", difficulty=5)
+    rw = reward_with_fees(0)
+    tx = Transaction([], rw)
+    tx_dict = tx.to_dict()
+    tx_dict['fee'] = 0  # Coinbase has no fee
+    cb = Block(0, int(time.time()), [tx_dict['hash']], "", difficulty=5)
+    cb.fees_collected = 0
     nouce = cb.pow()
     cb.make(nouce)
-    # Save block and transactions to database.
     BlockChainDB().insert(cb.to_dict())
-    TransactionDB().insert(rw.to_dict())
+    TransactionDB().insert(tx_dict)
     return cb
 
 def get_all_untransactions():
@@ -34,7 +41,6 @@ def mine():
     """
     Main miner method.
     """
-    # Found last block and unchecked transactions.
     last_block = BlockChainDB().last()
     if len(last_block) == 0:
         last_block = coinbase().to_dict()
@@ -43,24 +49,26 @@ def mine():
     difficulty = Block.calculate_difficulty(chain)
     
     untxdb = UnTransactionDB()
-    # Miner reward
-    rw = reward()
     untxs = untxdb.find_all()
-    untxs.append(rw.to_dict())
-    # untxs_dict = [untx.to_dict() for untx in untxs]
+    
+    total_fees = calculate_total_fees(untxs)
+    
+    rw = reward_with_fees(total_fees)
+    coinbase_tx = Transaction([], rw)
+    coinbase_dict = coinbase_tx.to_dict()
+    coinbase_dict['fee'] = 0
+    
+    untxs.append(coinbase_dict)
     untx_hashes = untxdb.all_hashes()
-    # Clear the untransaction database.
     untxdb.clear()
-
-    # Miner reward is the first transaction.
-    untx_hashes.insert(0,rw.hash)
+    
+    untx_hashes.insert(0, coinbase_dict['hash'])
     cb = Block(last_block['index'] + 1, int(time.time()), untx_hashes, last_block['hash'], difficulty)
+    cb.fees_collected = total_fees
     nouce = cb.pow()
     cb.make(nouce)
-    # Save block and transactions to database.
     BlockChainDB().insert(cb.to_dict())
     TransactionDB().insert(untxs)
-    # Broadcast to other nodes
     Block.spread(cb.to_dict())
     Transaction.blocked_spread(untxs)
     return cb
