@@ -1,7 +1,6 @@
 # coding:utf-8
 from xmlrpc.server import SimpleXMLRPCServer  
 from xmlrpc.client import ServerProxy
-from node import get_nodes, add_node
 from database import BlockChainDB, UnTransactionDB, TransactionDB
 from lib.common import cprint
 server = None
@@ -21,7 +20,17 @@ class RpcServer():
         return bcdb.find_all()
 
     def new_block(self,block):
+        from block import Block
         cprint('RPC', block)
+        
+        chain = BlockChainDB().find_all()
+        expected_difficulty = Block.calculate_difficulty(chain)
+        block_difficulty = block.get('difficulty', 5)
+        
+        if block_difficulty != expected_difficulty:
+            cprint('ERROR', f"Invalid difficulty: expected {expected_difficulty}, got {block_difficulty}")
+            raise Exception(f"Invalid difficulty: expected {expected_difficulty}, got {block_difficulty}")
+        
         BlockChainDB().insert(block)
         UnTransactionDB().clear()
         cprint('INFO',"Receive new block.")
@@ -43,7 +52,8 @@ class RpcServer():
         return True
 
     def add_node(self, address):
-        add_node(address)
+        import node
+        node.add_node(address)
         return True
 
 class RpcClient():
@@ -83,8 +93,9 @@ def start_server(ip, port=8301):
     server.serve_forever()
 
 def get_clients():
+    import node
     clients = []
-    nodes = get_nodes()
+    nodes = node.get_nodes()
 
     for node in nodes:
         clients.append(RpcClient(node))

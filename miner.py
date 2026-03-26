@@ -19,7 +19,7 @@ def coinbase():
     First block generate.
     """
     rw = reward()
-    cb = Block(0, int(time.time()), [rw.hash], "")
+    cb = Block(0, int(time.time()), [rw.hash], "", difficulty=5)
     nouce = cb.pow()
     cb.make(nouce)
     # Save block and transactions to database.
@@ -38,6 +38,10 @@ def mine():
     last_block = BlockChainDB().last()
     if len(last_block) == 0:
         last_block = coinbase().to_dict()
+    
+    chain = BlockChainDB().find_all()
+    difficulty = Block.calculate_difficulty(chain)
+    
     untxdb = UnTransactionDB()
     # Miner reward
     rw = reward()
@@ -50,7 +54,7 @@ def mine():
 
     # Miner reward is the first transaction.
     untx_hashes.insert(0,rw.hash)
-    cb = Block( last_block['index'] + 1, int(time.time()), untx_hashes, last_block['hash'])
+    cb = Block(last_block['index'] + 1, int(time.time()), untx_hashes, last_block['hash'], difficulty)
     nouce = cb.pow()
     cb.make(nouce)
     # Save block and transactions to database.
