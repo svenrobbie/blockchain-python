@@ -14,7 +14,7 @@ A blockchain implementation in Python featuring mining, transactions, node netwo
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/svenrobbie/blockchain-python
 cd blockchain-python
 
 # Install dependencies
@@ -142,7 +142,7 @@ Start the web interface:
 python blockchain.py start
 ```
 
-Access at `http://localhost:5001`
+Access at `http://localhost:5001` or 'http://127.0.0.1:5001'
 
 Features:
 - Dashboard with balance and chain stats
