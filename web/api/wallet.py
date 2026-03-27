@@ -23,6 +23,7 @@ class SendRequest(BaseModel):
     to_address: str
     amount: int
     password: str
+    fee: float = 0.0001
 
 
 @router.get("/accounts")
@@ -146,6 +147,7 @@ async def send_coins(request: SendRequest):
             request.from_address,
             request.to_address,
             request.amount,
+            fee=request.fee,
             private_key=private_key
         )
         
@@ -155,6 +157,8 @@ async def send_coins(request: SendRequest):
             "success": True,
             "tx_hash": tx_dict["hash"],
             "amount": request.amount,
+            "fee": request.fee,
+            "total": request.amount + request.fee,
             "to": request.to_address
         }
     except WalletLockedError as e:

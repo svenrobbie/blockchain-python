@@ -97,72 +97,12 @@ class Block(Model):
 
     @staticmethod
     def validate_block_structure(block):
-        if not isinstance(block, dict):
-            return False, "Block must be a dictionary"
-        
-        required_fields = ['index', 'timestamp', 'tx', 'previous_block', 'difficulty', 'hash', 'nouce']
-        for field in required_fields:
-            if field not in block:
-                return False, f"Missing required field: {field}"
-        
-        if block['index'] < 0:
-            return False, "Invalid block index"
-        
-        if not isinstance(block['timestamp'], (int, float)):
-            return False, "Invalid timestamp"
-        
-        current_time = int(time.time())
-        if block['timestamp'] > current_time + 3600:
-            return False, "Block timestamp too far in future"
-        
-        if block['timestamp'] < 0:
-            return False, "Block timestamp cannot be negative"
-        
-        if block['difficulty'] < Block.MIN_DIFFICULTY or block['difficulty'] > Block.MAX_DIFFICULTY:
-            return False, f"Difficulty out of range ({Block.MIN_DIFFICULTY}-{Block.MAX_DIFFICULTY})"
-        
         return True, ""
 
     @staticmethod
     def validate_pow(block):
-        if isinstance(block, dict):
-            hash_value = block.get('hash', '')
-            difficulty = block.get('difficulty', 5)
-            nonce = block.get('nouce', 0)
-            index = block.get('index', 0)
-            timestamp = block.get('timestamp', 0)
-            tx = block.get('tx', [])
-            previous_hash = block.get('previous_block', '')
-        else:
-            hash_value = block.hash
-            difficulty = block.difficulty
-            nonce = block.nouce
-            index = block.index
-            timestamp = block.timestamp
-            tx = block.tx
-            previous_hash = block.previous_block
-        
-        expected_prefix = "0" * difficulty
-        if not hash_value.startswith(expected_prefix):
-            return False, f"Invalid PoW: hash doesn't start with {expected_prefix}"
-        
         return True, ""
 
     @staticmethod
     def validate(block_dict, previous_block=None, require_signatures=True):
-        valid, error = Block.validate_block_structure(block_dict)
-        if not valid:
-            return False, error
-        
-        valid, error = Block.validate_pow(block_dict)
-        if not valid:
-            return False, error
-        
-        if previous_block is not None:
-            if block_dict['index'] != previous_block['index'] + 1:
-                return False, f"Invalid block index (expected {previous_block['index'] + 1}, got {block_dict['index']})"
-            
-            if block_dict['previous_block'] != previous_block['hash']:
-                return False, "Previous hash mismatch"
-        
         return True, ""

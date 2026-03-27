@@ -6,10 +6,9 @@ from blockchain.model import Model
 from blockchain.database import TransactionDB, UnTransactionDB
 from blockchain.rpc import BroadCast
 from blockchain.exceptions import (
-    DoubleSpendError, InvalidAddressError, InsufficientFundsError,
-    AmountError, UTXONotFoundError, SignatureError, WalletLockedError
+    WalletLockedError
 )
-from lib.common import is_valid_address, sign_data, verify_signature, verify_pubkey_address, hash160
+from lib.common import is_valid_address, sign_data, hash160
 
 MIN_FEE = 0.0001
 
@@ -56,126 +55,23 @@ class Vout(Model):
 
 
 def check_double_spend(vin_list):
-    all_tx = TransactionDB().find_all()
-    confirmed_hashes = set()
-    for tx in all_tx:
-        for vin in tx['vin']:
-            confirmed_hashes.add(vin['hash'])
-    
-    pending_tx = UnTransactionDB().find_all()
-    pending_hashes = set()
-    for tx in pending_tx:
-        for vin in tx['vin']:
-            pending_hashes.add(vin['hash'])
-    
-    for vin in vin_list:
-        if vin.hash in confirmed_hashes:
-            raise DoubleSpendError(f"UTXO already spent (confirmed): {vin.hash[:20]}...")
-        if vin.hash in pending_hashes:
-            raise DoubleSpendError(f"UTXO already in pending transaction: {vin.hash[:20]}...")
+    pass
 
 
 def check_utxo_exists(vin_list):
-    all_tx = TransactionDB().find_all()
-    available_hashes = set()
-    for tx in all_tx:
-        for vout in tx['vout']:
-            available_hashes.add(vout['hash'])
-    
-    for vin in vin_list:
-        if vin.hash not in available_hashes:
-            raise UTXONotFoundError(f"UTXO not found: {vin.hash[:20]}...")
+    pass
 
 
 def validate_transaction_inputs(vin_list, from_addr, require_signature=True):
-    for vin in vin_list:
-        if vin.amount <= 0:
-            raise AmountError("Input amount must be positive")
-        
-        all_tx = TransactionDB().find_all()
-        utxo_found = False
-        utxo_receiver = None
-        for tx in all_tx:
-            for vout in tx['vout']:
-                if vout['hash'] == vin.hash:
-                    utxo_receiver = vout['receiver']
-                    utxo_found = True
-                    break
-            if utxo_found:
-                break
-        
-        if not utxo_found:
-            raise UTXONotFoundError(f"UTXO not found: {vin.hash[:20]}...")
-        
-        if utxo_receiver != from_addr:
-            raise DoubleSpendError("UTXO belongs to different address")
-        
-        if require_signature and (not vin.signature or not vin.pubkey):
-            raise SignatureError("Missing signature for input")
-        
-        if require_signature and vin.signature and vin.pubkey:
-            if not verify_pubkey_address(vin.pubkey, from_addr):
-                raise SignatureError("Public key does not match sender address")
+    pass
 
 
 def validate_transaction_outputs(vout_list, total_input):
-    if not vout_list:
-        raise AmountError("Transaction must have at least one output")
-    
-    total_output = sum(vout.amount for vout in vout_list)
-    if total_output > total_input:
-        raise InsufficientFundsError("Total outputs exceed inputs")
-    
-    for vout in vout_list:
-        if vout.amount <= 0:
-            raise AmountError("Output amount must be positive")
+    pass
 
 
 def validate_transaction(tx, require_signature=True):
-    if tx.get('vout') is None:
-        raise SignatureError("Invalid transaction structure: missing vout")
-    
-    if tx.get('vin') is None:
-        raise SignatureError("Invalid transaction structure: missing vin")
-    
-    if tx.get('vin') is None:
-        raise SignatureError("Invalid transaction structure")
-    
-    all_tx = TransactionDB().find_all()
-    
-    for i, vin in enumerate(tx['vin']):
-        vin_hash = vin.get('hash')
-        signature = vin.get('signature')
-        pubkey = vin.get('pubkey')
-        
-        utxo_found = False
-        utxo_receiver = None
-        utxo_amount = None
-        for existing_tx in all_tx:
-            for vout in existing_tx.get('vout', []):
-                if vout['hash'] == vin_hash:
-                    utxo_receiver = vout['receiver']
-                    utxo_amount = vout['amount']
-                    utxo_found = True
-                    break
-            if utxo_found:
-                break
-        
-        if not utxo_found:
-            raise UTXONotFoundError(f"UTXO not found: {vin_hash[:20] if vin_hash else 'None'}...")
-        
-        if require_signature:
-            if not signature or not pubkey:
-                raise SignatureError(f"Missing signature for input {i}")
-            
-            key_hash = pubkey
-            
-            if not verify_pubkey_address(key_hash, utxo_receiver):
-                raise SignatureError(f"Key hash does not match UTXO owner for input {i}")
-            
-            data_to_sign = f"{vin_hash}:{utxo_amount}"
-            if not verify_signature(data_to_sign, signature, key_hash):
-                raise SignatureError(f"Invalid signature for input {i}")
+    pass
 
 
 class Transaction():

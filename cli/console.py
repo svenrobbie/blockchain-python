@@ -246,11 +246,11 @@ class Console:
             time.sleep(2)
 
     def _print_dashboard(self):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
-        txdb = database_sqlite.TransactionDB()
+        txdb = db_module.TransactionDB()
         transactions = txdb.find_all()
-        untxdb = database_sqlite.UnTransactionDB()
+        untxdb = db_module.UnTransactionDB()
         pending = untxdb.find_all()
         account = account_module.get_account()
         balance = self.get_balance(account['address']) if account else 0
@@ -313,11 +313,11 @@ class Console:
         self.dashboard_running = False
 
     def cmd_status(self, args):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
-        txdb = database_sqlite.TransactionDB()
+        txdb = db_module.TransactionDB()
         transactions = txdb.find_all()
-        untxdb = database_sqlite.UnTransactionDB()
+        untxdb = db_module.UnTransactionDB()
         pending = untxdb.find_all()
 
         account = account_module.get_account()
@@ -659,7 +659,7 @@ class Console:
             print(colored(f"\nTransaction failed: {e}", "red"))
 
     def tx_pending(self):
-        untxdb = database_sqlite.UnTransactionDB()
+        untxdb = db_module.UnTransactionDB()
         pending = untxdb.find_all()
         print(colored("\n=== Pending Transactions ===", "cyan", bold=True))
         if pending:
@@ -673,8 +673,8 @@ class Console:
             print(colored("No pending transactions", "yellow"))
 
     def tx_view(self, tx_hash):
-        txdb = database_sqlite.TransactionDB()
-        untxdb = database_sqlite.UnTransactionDB()
+        txdb = db_module.TransactionDB()
+        untxdb = db_module.UnTransactionDB()
 
         all_txs = txdb.find_all() + untxdb.find_all()
 
@@ -718,7 +718,7 @@ class Console:
             print(colored(f"Unknown chain command: {subcmd}", "red"))
 
     def chain_status(self):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
 
         print(colored("\n=== Chain Status ===", "cyan", bold=True))
@@ -738,7 +738,7 @@ class Console:
             print(f"Hash: {colored(last.get('hash', 'N/A')[:20] + '...', 'white')}")
 
     def chain_view(self, index):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
 
         if index == -1:
@@ -764,7 +764,7 @@ class Console:
             print(f"  {i+1}. {tx_hash[:40]}...")
 
     def chain_info(self):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
 
         if not chain:
@@ -790,7 +790,7 @@ class Console:
             print(f"Last 10 avg time:  {sum(recent_diffs) // len(recent_diffs)}s")
 
     def chain_verify(self):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
 
         print(colored("\n=== Verifying Chain ===", "cyan", bold=True))

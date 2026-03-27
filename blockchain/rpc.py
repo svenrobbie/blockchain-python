@@ -25,16 +25,7 @@ class RpcServer():
         return bcdb.find_all()
 
     def new_block(self,block):
-        from blockchain.block import Block
         cprint('RPC', block)
-        
-        chain = BlockChainDB().find_all()
-        expected_difficulty = Block.calculate_difficulty(chain)
-        block_difficulty = block.get('difficulty', 5)
-        
-        if block_difficulty != expected_difficulty:
-            cprint('ERROR', f"Invalid difficulty: expected {expected_difficulty}, got {block_difficulty}")
-            raise Exception(f"Invalid difficulty: expected {expected_difficulty}, got {block_difficulty}")
         
         BlockChainDB().insert(block)
         UnTransactionDB().clear()

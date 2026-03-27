@@ -40,7 +40,7 @@ async def get_chain_status():
 
 
 @router.get("/blocks")
-async def get_blocks(limit: int = 10, offset: int = 0):
+async def get_blocks(limit: int = 100, offset: int = 0):
     from blockchain.database import BlockChainDB
     
     bcdb = BlockChainDB()
@@ -69,15 +69,25 @@ async def get_blocks(limit: int = 10, offset: int = 0):
 
 @router.get("/block/{index}")
 async def get_block(index: int):
-    from blockchain.database import BlockChainDB
+    from blockchain.database import BlockChainDB, TransactionDB
     
     bcdb = BlockChainDB()
+    txdb = TransactionDB()
     chain = bcdb.find_all()
     
     if index < 0 or index >= len(chain):
         return {"error": "Block not found"}
     
     block = chain[index]
+    tx_hashes = block.get("tx", [])
+    
+    full_txs = []
+    for tx_hash in tx_hashes:
+        all_txs = txdb.find_all()
+        for tx in all_txs:
+            if tx.get("hash") == tx_hash:
+                full_txs.append(tx)
+                break
     
     return {
         "index": block["index"],
@@ -86,8 +96,9 @@ async def get_block(index: int):
         "timestamp": block.get("timestamp", 0),
         "difficulty": block.get("difficulty", 5),
         "nonce": block.get("nouce", 0),
-        "tx_count": len(block.get("tx", [])),
-        "tx_hashes": block.get("tx", []),
+        "tx_count": len(tx_hashes),
+        "tx_hashes": tx_hashes,
+        "transactions": full_txs,
         "fees_collected": block.get("fees_collected", 0)
     }
 

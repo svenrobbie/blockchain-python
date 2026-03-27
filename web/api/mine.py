@@ -35,7 +35,7 @@ def mining_loop():
             block = miner.mine()
             
             mining_state['blocks_mined'] += 1
-            mining_state['total_earnings'] += 20 + block.fees_collected
+            mining_state['total_earnings'] = round(mining_state['total_earnings'] + 2.5 + block.fees_collected, 3)
             
             mining_state['current_block_index'] = block.index + 1
             

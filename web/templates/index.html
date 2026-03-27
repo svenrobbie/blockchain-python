@@ -9,7 +9,7 @@
 <body>
     <div class="app">
         <nav class="sidebar">
-            <div class="logo">BLOCKCHAIN</div>
+            <div class="logo">TCTS</div>
             <div class="nav">
                 <a class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
                     <span class="nav-icon">&#127968;</span> Dashboard
@@ -51,6 +51,7 @@
         let currentAccount = null;
         let refreshInterval = null;
         let miningInterval = null;
+        let currentBlockIndex = null;
 
         // Theme management
         function initTheme() {
@@ -227,14 +228,8 @@
                         <button class="btn btn-secondary" onclick="loadDashboard(document.getElementById('mainContent'));">Refresh</button>
                     </div>
                 </div>
-                
-                <div class="card animate-slide-up stagger-5">
-                    <h3 class="section-title">Recent Blocks</h3>
-                    <div id="recentBlocks"></div>
-                </div>
             `;
             
-            loadRecentBlocks();
             refreshInterval = setInterval(async () => {
                 const res = await api('/chain/status');
                 if (!res.error) {
@@ -245,34 +240,28 @@
             }, 5000);
         }
 
-        async function loadRecentBlocks() {
-            const container = document.getElementById('recentBlocks');
-            if (!container) return;
-            
-            const res = await api('/chain/blocks?limit=5');
-            
-            if (res.blocks && res.blocks.length > 0) {
-                container.innerHTML = res.blocks.map(block => `
-                    <div class="block-card animate-slide-in-right" onclick="viewBlock(${block.index})">
-                        <div style="display: flex; justify-content: space-between;">
-                            <strong>Block #${block.index}</strong>
-                            <span class="block-hash">${block.hash.substring(0, 15)}...</span>
-                        </div>
-                        <div style="margin-top: 8px; color: var(--text-secondary); font-size: 0.85rem;">
-                            TX: ${block.tx_count} | Difficulty: ${block.difficulty} | Fees: ${block.fees}
-                        </div>
-                    </div>
-                `).join('');
-            } else {
-                container.innerHTML = '<div class="empty-state">No blocks yet</div>';
-            }
-        }
-
         async function viewBlock(index) {
             const main = document.getElementById('mainContent');
             main.style.opacity = '0';
+            currentBlockIndex = index;
             
             const res = await api(`/chain/block/${index}`);
+            
+            if (res.error) {
+                main.innerHTML = `
+                    <div class="header">
+                        <h1 class="page-title">Block Not Found</h1>
+                        <button class="btn btn-secondary" onclick="navigate('explorer')">Back</button>
+                    </div>
+                    <div class="card">
+                        <div class="empty-state">Block #${index} does not exist</div>
+                    </div>
+                `;
+                main.style.opacity = '1';
+                return;
+            }
+            
+            const txs = res.transactions || [];
             
             main.innerHTML = `
                 <div class="header">
@@ -294,12 +283,139 @@
                 </div>
                 
                 <div class="card animate-slide-up">
-                    <h3 class="section-title">Transactions (${res.tx_hashes?.length || 0})</h3>
-                    ${res.tx_hashes?.map(tx => `
-                        <div class="tx-item">
-                            <div class="tx-hash">${tx}</div>
+                    <h3 class="section-title">Transactions (${txs.length || 0})</h3>
+                    ${txs.length > 0 ? txs.map((tx, i) => {
+                        const totalOutput = (tx.vout || []).reduce((sum, v) => sum + (v.amount || 0), 0);
+                        const fee = tx.fee || 0;
+                        const isCoinbase = !tx.vin || tx.vin.length === 0;
+                        const senderSpent = totalOutput + fee;
+                        
+                        return `
+                            <div class="tx-item" onclick="viewTransaction('${tx.hash}')" style="cursor: pointer;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div class="tx-hash">${tx.hash.substring(0, 30)}...</div>
+                                        <div style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 4px;">
+                                            ${isCoinbase ? 'Coinbase (Miner Reward)' : 'Transfer'}
+                                        </div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-weight: bold; color: var(--accent);">
+                                            ${totalOutput.toFixed(3)} coins
+                                        </div>
+                                        <div style="color: var(--text-secondary); font-size: 0.75rem;">
+                                            Fee: ${fee.toFixed(4)}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('') : '<div class="empty-state">No transactions</div>'}
+                </div>
+            `;
+            
+            main.style.opacity = '1';
+        }
+        
+        async function viewTransaction(txHash) {
+            const main = document.getElementById('mainContent');
+            main.style.opacity = '0';
+            
+            const res = await api(`/chain/transaction/${txHash}`);
+            
+            if (res.error) {
+                main.innerHTML = `
+                    <div class="header">
+                        <h1 class="page-title">Transaction Not Found</h1>
+                        <button class="btn btn-secondary" onclick="navigate('explorer')">Back</button>
+                    </div>
+                    <div class="card">
+                        <div class="empty-state">Transaction not found</div>
+                    </div>
+                `;
+                main.style.opacity = '1';
+                return;
+            }
+            
+            const isCoinbase = !res.vin || res.vin.length === 0;
+            const totalOutput = (res.vout || []).reduce((sum, v) => sum + (v.amount || 0), 0);
+            const fee = res.fee || 0;
+            const senderSpent = totalOutput + fee;
+            
+            main.innerHTML = `
+                <div class="header">
+                    <h1 class="page-title">Transaction Details</h1>
+                    <button class="btn btn-secondary" onclick="viewBlock(currentBlockIndex)">Back to Block</button>
+                </div>
+                
+                <div class="card animate-slide-up">
+                    <h3 class="section-title">Transaction Info</h3>
+                    <div style="display: grid; gap: 12px;">
+                        <div><strong>Hash:</strong> <span class="block-hash" style="word-break: break-all;">${res.hash}</span></div>
+                        <div><strong>Timestamp:</strong> ${new Date(res.timestamp * 1000).toLocaleString()}</div>
+                        <div><strong>Status:</strong> <span class="badge ${res.status === 'confirmed' ? 'badge-success' : 'badge-warning'}">${res.status}</span></div>
+                    </div>
+                </div>
+                
+                ${!isCoinbase ? `
+                <div class="card animate-slide-up">
+                    <h3 class="section-title">Inputs (Sender Uses)</h3>
+                    <div style="display: grid; gap: 8px;">
+                        ${res.vin.map(v => `
+                            <div class="tx-item">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span class="block-hash">${v.hash ? v.hash.substring(0, 30) + '...' : 'Unknown'}</span>
+                                    <span style="color: var(--accent);">${v.amount || 0} coins</span>
+                                </div>
+                            </div>
+                        `).join('') || '<div class="empty-state">No inputs</div>'}
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
+                            <strong>Sender Spent (Total + Fee):</strong> 
+                            <span style="color: var(--accent); font-weight: bold;">${senderSpent.toFixed(4)} coins</span>
                         </div>
-                    `).join('') || '<div class="empty-state">No transactions</div>'}
+                    </div>
+                </div>
+                ` : `
+                <div class="card animate-slide-up">
+                    <h3 class="section-title">Coinbase Transaction</h3>
+                    <div style="color: var(--text-secondary);">
+                        This is a miner reward transaction (coinbase) with no inputs.
+                    </div>
+                </div>
+                `}
+                
+                <div class="card animate-slide-up">
+                    <h3 class="section-title">Outputs (Recipients)</h3>
+                    <div style="display: grid; gap: 8px;">
+                        ${res.vout.map(v => `
+                            <div class="tx-item">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span class="block-hash">${v.receiver ? v.receiver.substring(0, 30) + '...' : 'Unknown'}</span>
+                                    <span style="color: var(--success);">+${v.amount || 0} coins</span>
+                                </div>
+                            </div>
+                        `).join('') || '<div class="empty-state">No outputs</div>'}
+                    </div>
+                </div>
+                
+                <div class="card animate-slide-up">
+                    <h3 class="section-title">Summary</h3>
+                    <div style="display: grid; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Total Output:</span>
+                            <span style="color: var(--success); font-weight: bold;">${totalOutput.toFixed(4)} coins</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Transaction Fee:</span>
+                            <span style="color: var(--warning);">${fee.toFixed(4)} coins</span>
+                        </div>
+                        ${!isCoinbase ? `
+                        <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--border);">
+                            <span>Sender's Total Spent:</span>
+                            <span style="color: var(--accent); font-weight: bold;">${senderSpent.toFixed(4)} coins (output + fee)</span>
+                        </div>
+                        ` : ''}
+                    </div>
                 </div>
             `;
             
@@ -422,6 +538,8 @@
             }
             
             const balanceRes = await api('/wallet/balance');
+            const balance = balanceRes.balance || 0;
+            const MIN_FEE = 0.0001;
             
             main.innerHTML = `
                 <div class="header">
@@ -437,19 +555,52 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label">Amount</label>
-                            <input type="number" id="sendAmount" class="form-input" placeholder="0" min="1" required>
+                            <input type="number" id="sendAmount" class="form-input" placeholder="0" min="0.0001" step="0.0001" required oninput="updateSendTotal(${balance})">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Fee</label>
+                            <input type="number" id="sendFee" class="form-input" value="${MIN_FEE}" min="${MIN_FEE}" step="0.0001" required oninput="updateSendTotal(${balance})">
+                            <small style="color: var(--text-secondary);">Minimum: ${MIN_FEE} coins</small>
+                        </div>
+                        <div id="sendSummary" style="margin-bottom: 20px; padding: 12px; background: var(--bg-secondary); border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span>Available Balance:</span>
+                                <span style="color: var(--success);">${balance.toFixed(4)} coins</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span>Total (amount + fee):</span>
+                                <span style="color: var(--accent);" id="sendTotal">0.0000 coins</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Remaining after send:</span>
+                                <span style="color: var(--warning);" id="sendRemaining">${balance.toFixed(4)} coins</span>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Password</label>
                             <input type="password" id="sendPassword" class="form-input" placeholder="Your wallet password" required>
                         </div>
-                        <div style="margin-bottom: 20px;">
-                            <strong>Available Balance:</strong> ${balanceRes.balance || 0} coins
-                        </div>
                         <button type="submit" class="btn btn-primary btn-block" id="sendBtn">Send</button>
                     </form>
                 </div>
             `;
+        }
+        
+        function updateSendTotal(balance) {
+            const amount = parseFloat(document.getElementById('sendAmount').value) || 0;
+            const fee = parseFloat(document.getElementById('sendFee').value) || 0.0001;
+            const total = amount + fee;
+            const remaining = balance - total;
+            
+            document.getElementById('sendTotal').textContent = total.toFixed(4) + ' coins';
+            document.getElementById('sendRemaining').textContent = remaining.toFixed(4) + ' coins';
+            
+            const remainingEl = document.getElementById('sendRemaining');
+            if (remaining < 0) {
+                remainingEl.style.color = 'var(--error)';
+            } else {
+                remainingEl.style.color = 'var(--warning)';
+            }
         }
 
         async function handleSend(event) {
@@ -460,7 +611,8 @@
             
             const from = currentAccount.address;
             const to = document.getElementById('sendTo').value;
-            const amount = parseInt(document.getElementById('sendAmount').value);
+            const amount = parseFloat(document.getElementById('sendAmount').value);
+            const fee = parseFloat(document.getElementById('sendFee').value);
             const password = document.getElementById('sendPassword').value;
             
             btn.disabled = true;
@@ -469,16 +621,18 @@
             const res = await api('/wallet/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ from_address: from, to_address: to, amount, password })
+                body: JSON.stringify({ from_address: from, to_address: to, amount, fee, password })
             });
             
             if (res.success) {
                 alert.innerHTML = `<div class="alert alert-success">
-                    <strong>Success!</strong> Sent ${amount} coins.<br>
+                    <strong>Success!</strong> Sent ${amount} coins (fee: ${fee}).<br>
+                    Total: ${res.total} coins<br>
                     TX Hash: ${res.tx_hash.substring(0, 20)}...
                 </div>`;
                 document.getElementById('sendPassword').value = '';
                 document.getElementById('sendAmount').value = '';
+                document.getElementById('sendFee').value = '0.0001';
                 showToast('Transaction sent successfully!', 'success');
             } else {
                 alert.innerHTML = `<div class="alert alert-error"><strong>Error:</strong> ${res.error}</div>`;
@@ -544,7 +698,7 @@
 
         // Explorer Page
         async function loadExplorer(main) {
-            const res = await api('/chain/blocks?limit=20');
+            const res = await api('/chain/blocks?limit=100');
             
             main.innerHTML = `
                 <div class="header">
@@ -553,7 +707,15 @@
                 </div>
                 
                 <div class="card animate-slide-up">
-                    <h3 class="section-title">Recent Blocks</h3>
+                    <h3 class="section-title">Search Block</h3>
+                    <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+                        <input type="number" id="blockSearch" class="form-input" placeholder="Enter block index..." min="0">
+                        <button class="btn btn-primary" onclick="searchBlock()">Search</button>
+                    </div>
+                </div>
+                
+                <div class="card animate-slide-up">
+                    <h3 class="section-title">All Blocks</h3>
                     ${res.blocks && res.blocks.length > 0 ? res.blocks.map(block => `
                         <div class="block-card" onclick="viewBlock(${block.index})">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -572,6 +734,15 @@
                     `).join('') : '<div class="empty-state">No blocks yet</div>'}
                 </div>
             `;
+        }
+        
+        async function searchBlock() {
+            const index = document.getElementById('blockSearch').value;
+            if (index === '' || index < 0) {
+                showToast('Please enter a valid block index', 'warning');
+                return;
+            }
+            viewBlock(parseInt(index));
         }
 
         // Network Page

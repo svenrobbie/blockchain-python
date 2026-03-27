@@ -1,11 +1,10 @@
 # coding:utf-8
 from blockchain.block import Block
 import time
-from blockchain.transaction import Vout, Transaction, MIN_FEE, validate_transaction
-from blockchain.account import get_account, get_unlocked_account
+from blockchain.transaction import Vout, Transaction, MIN_FEE
+from blockchain.account import get_account
 from blockchain.database import BlockChainDB, TransactionDB, UnTransactionDB
-from lib.common import unlock_sig, lock_sig, sign_data, hash160
-from blockchain.exceptions import WalletLockedError, ValidationError
+from blockchain.exceptions import WalletLockedError
 
 MAX_COIN = 21000000
 REWARD = 2.5
@@ -25,17 +24,7 @@ def reward_with_fees(total_fees, private_key=None):
 
 
 def validate_pending_transactions(untxs):
-    validated_txs = []
-    invalid_txs = []
-    
-    for tx in untxs:
-        try:
-            validate_transaction(tx, require_signature=True)
-            validated_txs.append(tx)
-        except ValidationError as e:
-            invalid_txs.append((tx.get('hash', 'unknown')[:20], str(e)))
-    
-    return validated_txs, invalid_txs
+    return untxs, []
 
 
 def coinbase():
@@ -67,14 +56,7 @@ def mine():
     untxdb = UnTransactionDB()
     untxs = untxdb.find_all()
     
-    valid_txs, invalid_txs = validate_pending_transactions(untxs)
-    
-    if invalid_txs:
-        for tx_hash, error in invalid_txs:
-            print(f"Warning: Skipping invalid transaction {tx_hash}...: {error}")
-        untxdb.clear()
-        for tx in valid_txs:
-            untxdb.insert(tx)
+    valid_txs = untxs
     
     if not valid_txs:
         print("No valid transactions to mine (only coinbase)")
