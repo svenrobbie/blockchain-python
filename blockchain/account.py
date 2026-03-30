@@ -1,6 +1,7 @@
 # coding:utf-8
 import hashlib
 import base64
+import os
 from blockchain.model import Model
 from lib.common import pubkey_to_address, hash160
 from blockchain.database import AccountDB
@@ -37,27 +38,50 @@ def _decrypt_key(encrypted_key, password):
         raise InvalidPasswordError("Invalid password")
 
 
-def new_account(password=None):
+def generate_salt():
+    return os.urandom(16).hex()
+
+
+def hash_password(password, salt):
+    return hashlib.sha256((password + salt).encode()).hexdigest()
+
+
+def verify_password_hash(password, salt, stored_hash):
+    computed_hash = hash_password(password, salt)
+    return computed_hash == stored_hash
+
+
+def new_account(password=None, password_hash=None, salt=None):
     private_key = _generate_private_key()
     public_key = hash160(private_key.encode())
     address = pubkey_to_address(public_key.encode())
     
     encrypted_key = ""
+    stored_hash = ""
+    stored_salt = ""
+    
     if password:
         encrypted_key = _encrypt_key(private_key, password)
+        stored_salt = generate_salt()
+        stored_hash = hash_password(password, stored_salt)
+    elif password_hash and salt:
+        encrypted_key = _encrypt_key(private_key, password)
+        stored_hash = password_hash
+        stored_salt = salt
     
     adb = AccountDB()
     adb.insert({
         'pubkey': public_key, 
         'address': address,
-        'encrypted_key': encrypted_key
+        'encrypted_key': encrypted_key,
+        'password_hash': stored_hash,
+        'salt': stored_salt
     })
     
     return private_key, public_key, address
 
 
 def _generate_private_key():
-    import os
     import time
     import random
     entropy = os.urandom(32) + str(random.randrange(2**256)).encode() + str(int(time.time() * 1000000)).encode()
@@ -108,6 +132,29 @@ def unlock_account(address, password):
     return account
 
 
+def unlock_account_with_hash(address, password_hash):
+    adb = AccountDB()
+    account = adb.find_by_address(address)
+    
+    if not account:
+        return None
+    
+    stored_hash = account.get('password_hash')
+    salt = account.get('salt')
+    
+    if not stored_hash or not salt:
+        return None
+    
+    if verify_password_hash(password_hash, salt, stored_hash):
+        from blockchain.account import _decrypt_key
+        private_key = _decrypt_key(account.get('encrypted_key', ''), "dummy")
+        account['private_key'] = private_key
+        account['unlocked'] = True
+        return account
+    
+    return None
+
+
 def login(index_or_address, password=None):
     adb = AccountDB()
     if isinstance(index_or_address, int):
@@ -143,5 +190,15 @@ def set_password(address, password):
         return False
     
     encrypted_key = _encrypt_key(account.get('private_key', ''), password)
-    adb.update_encrypted_key(account['id'], encrypted_key)
+    salt = generate_salt()
+    password_hash = hash_password(password, salt)
+    
+    cursor = adb.conn.cursor()
+    cursor.execute('''
+        UPDATE accounts 
+        SET encrypted_key = ?, password_hash = ?, salt = ?
+        WHERE id = ?
+    ''', (encrypted_key, password_hash, salt, account['id']))
+    adb.conn.commit()
+    
     return True

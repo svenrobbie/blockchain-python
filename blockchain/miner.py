@@ -4,11 +4,11 @@ import time
 from blockchain.transaction import Vout, Transaction, MIN_FEE, validate_transaction
 from blockchain.account import get_account, get_unlocked_account
 from blockchain.database import BlockChainDB, TransactionDB, UnTransactionDB
-from lib.common import unlock_sig, lock_sig, sign_data, hash160
+from blockchain.config import MINING_REWARD
 from blockchain.exceptions import WalletLockedError, ValidationError
 
 MAX_COIN = 21000000
-REWARD = 2.5
+REWARD = MINING_REWARD
 
 
 def calculate_total_fees(transactions):

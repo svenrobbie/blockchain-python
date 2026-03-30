@@ -3,13 +3,15 @@ import sys
 import os
 
 web_dir = os.path.dirname(os.path.abspath(__file__))
-if web_dir not in sys.path:
-    sys.path.insert(0, web_dir)
+project_root = os.path.dirname(web_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from blockchain.config import WEB_PORT
 
 from api import wallet, chain, node, auth, mine
 
@@ -106,4 +108,4 @@ async def api_info():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5001)
+    uvicorn.run(app, host="0.0.0.0", port=WEB_PORT)

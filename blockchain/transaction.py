@@ -24,8 +24,14 @@ class Vin(Model):
 
 class Vout(Model):
     def __init__(self, receiver, amount):
+        if not isinstance(amount, (int, float)):
+            raise AmountError("Amount must be a number")
+        
         if amount <= 0:
             raise AmountError("Output amount must be positive")
+        
+        if amount < MIN_FEE:
+            raise AmountError(f"Output amount must be at least {MIN_FEE}")
         
         if not isinstance(receiver, str):
             raise InvalidAddressError("Receiver must be a string")

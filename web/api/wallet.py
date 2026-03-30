@@ -1,28 +1,25 @@
 # coding:utf-8
-import sys
-import os
-
-web_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(os.path.dirname(web_dir))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+from . import _project_root  # noqa: F401 - ensures path is initialized
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Optional
+import hashlib
+import base64
 
 router = APIRouter(prefix="/api/wallet", tags=["wallet"])
 
 
 class CreateWalletRequest(BaseModel):
-    password: str
+    password_hash: str
+    salt: str
 
 
 class SendRequest(BaseModel):
     from_address: str
     to_address: str
-    amount: int
-    password: str
+    amount: float
+    password_hash: str
 
 
 @router.get("/accounts")
@@ -36,7 +33,8 @@ async def get_accounts():
                 "id": acc.get("id"),
                 "address": acc.get("address"),
                 "is_active": acc.get("is_active", False),
-                "has_password": bool(acc.get("encrypted_key"))
+                "has_password": bool(acc.get("password_hash")),
+                "salt": acc.get("salt", "") if acc.get("password_hash") else None
             }
             for acc in accounts
         ]
@@ -56,7 +54,8 @@ async def get_current_account():
             "id": account.get("id"),
             "address": account.get("address"),
             "is_active": account.get("is_active", False),
-            "has_password": bool(account.get("encrypted_key"))
+            "has_password": bool(account.get("password_hash")),
+            "salt": account.get("salt", "") if account.get("password_hash") else None
         }
     }
 
@@ -89,11 +88,15 @@ async def create_wallet(request: CreateWalletRequest):
     from blockchain.account import new_account
     
     try:
-        private_key, public_key, address = new_account(request.password)
+        private_key, public_key, address = new_account(
+            password=None,
+            password_hash=request.password_hash,
+            salt=request.salt
+        )
         return {
             "success": True,
             "address": address,
-            "message": "Wallet created successfully. Remember your password!"
+            "message": "Wallet created successfully!"
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -103,30 +106,12 @@ async def create_wallet(request: CreateWalletRequest):
 async def send_coins(request: SendRequest):
     from blockchain.transaction import Transaction
     from blockchain.database import AccountDB
+    from blockchain.account import verify_password_hash, _decrypt_key
     from blockchain.exceptions import (
         ValidationError, DoubleSpendError, InvalidAddressError,
         InsufficientFundsError, AmountError, UTXONotFoundError,
         WalletLockedError
     )
-    import hashlib
-    import base64
-    
-    try:
-        from cryptography.fernet import Fernet
-        FERNET_AVAILABLE = True
-    except ImportError:
-        FERNET_AVAILABLE = False
-    
-    def decrypt_key(encrypted_key, password):
-        if not FERNET_AVAILABLE or not encrypted_key:
-            return encrypted_key
-        try:
-            key = hashlib.sha256(password.encode()).digest()
-            key_b64 = base64.urlsafe_b64encode(key)
-            f = Fernet(key_b64)
-            return f.decrypt(encrypted_key.encode()).decode()
-        except Exception:
-            return None
     
     adb = AccountDB()
     account = adb.find_by_address(request.from_address)
@@ -134,12 +119,22 @@ async def send_coins(request: SendRequest):
     if not account:
         return {"success": False, "error": "Account not found"}
     
-    if not account.get("encrypted_key"):
-        return {"success": False, "error": "Wallet has no password. Use CLI to set password first."}
+    stored_hash = account.get("password_hash")
+    salt = account.get("salt")
     
-    private_key = decrypt_key(account["encrypted_key"], request.password)
-    if not private_key:
+    if not stored_hash or not salt:
+        return {"success": False, "error": "Wallet has no password set"}
+    
+    if not verify_password_hash(request.password_hash, salt, stored_hash):
         return {"success": False, "error": "Invalid password"}
+    
+    try:
+        private_key = _decrypt_key(account.get("encrypted_key", ""), "dummy_for_hash_verified")
+    except Exception:
+        private_key = None
+    
+    if not private_key:
+        return {"success": False, "error": "Failed to decrypt private key"}
     
     try:
         tx_dict = Transaction.transfer(

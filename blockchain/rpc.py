@@ -2,14 +2,15 @@
 from xmlrpc.server import SimpleXMLRPCServer  
 from xmlrpc.client import ServerProxy
 from blockchain.database import BlockChainDB, UnTransactionDB, TransactionDB
+from blockchain.config import NODE_RPC_PORT, VERSION
 from lib.common import cprint
 server = None
 
-PORT = 8301
+PORT = NODE_RPC_PORT
 
 class RpcServer():
 
-    VERSION = "1.0"
+    VERSION = VERSION
 
     def __init__(self, server):
         self.server = server

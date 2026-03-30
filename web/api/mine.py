@@ -1,7 +1,5 @@
 # coding:utf-8
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from . import _project_root  # noqa: F401 - ensures path is initialized
 
 from fastapi import APIRouter
 import threading
@@ -23,6 +21,7 @@ mining_state = {
 def mining_loop():
     from blockchain import miner
     from blockchain.database import BlockChainDB
+    from blockchain.miner import REWARD
     
     bcdb = BlockChainDB()
     last_block_count = len(bcdb.find_all())
@@ -34,8 +33,13 @@ def mining_loop():
             
             block = miner.mine()
             
+            if block is None:
+                print("Mining failed, retrying...")
+                time.sleep(1)
+                continue
+            
             mining_state['blocks_mined'] += 1
-            mining_state['total_earnings'] += 20 + block.fees_collected
+            mining_state['total_earnings'] += REWARD + block.fees_collected
             
             mining_state['current_block_index'] = block.index + 1
             

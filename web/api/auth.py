@@ -1,7 +1,5 @@
 # coding:utf-8
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from . import _project_root  # noqa: F401 - ensures path is initialized
 
 from fastapi import APIRouter
 from pydantic import BaseModel

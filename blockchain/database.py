@@ -3,9 +3,25 @@ import sqlite3
 import json
 import os
 import time
+from functools import wraps
 
 _package_dir = os.path.dirname(os.path.abspath(__file__))
 DATABASE_PATH = os.path.join(_package_dir, 'data', 'blockchain_v2.db')
+
+
+def transaction(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        conn = self.get_conn()
+        try:
+            conn.execute("BEGIN")
+            result = func(self, *args, **kwargs)
+            conn.commit()
+            return result
+        except Exception as e:
+            conn.rollback()
+            raise
+    return wrapper
 
 
 class SQLiteDB:
@@ -93,6 +109,10 @@ class SQLiteDB:
             cursor.execute('ALTER TABLE accounts ADD COLUMN is_active INTEGER DEFAULT 0')
         if 'encrypted_key' not in columns:
             cursor.execute('ALTER TABLE accounts ADD COLUMN encrypted_key TEXT')
+        if 'password_hash' not in columns:
+            cursor.execute('ALTER TABLE accounts ADD COLUMN password_hash TEXT')
+        if 'salt' not in columns:
+            cursor.execute('ALTER TABLE accounts ADD COLUMN salt TEXT')
 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS nodes (
@@ -365,7 +385,9 @@ class AccountDB:
         rows = cursor.fetchall()
         return [{'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 
                  'is_active': row['is_active'], 
-                 'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None} for row in rows]
+                 'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None,
+                 'password_hash': row['password_hash'] if 'password_hash' in row.keys() else None,
+                 'salt': row['salt'] if 'salt' in row.keys() else None} for row in rows]
 
     def find_one(self):
         cursor = self.conn.cursor()
@@ -374,13 +396,17 @@ class AccountDB:
         if row:
             return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 
                     'is_active': row['is_active'], 
-                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None}
+                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None,
+                    'password_hash': row['password_hash'] if 'password_hash' in row.keys() else None,
+                    'salt': row['salt'] if 'salt' in row.keys() else None}
         cursor.execute('SELECT * FROM accounts ORDER BY id LIMIT 1')
         row = cursor.fetchone()
         if row:
             return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 
                     'is_active': row['is_active'], 
-                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None}
+                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None,
+                    'password_hash': row['password_hash'] if 'password_hash' in row.keys() else None,
+                    'salt': row['salt'] if 'salt' in row.keys() else None}
         return None
 
     def find_by_index(self, index):
@@ -390,7 +416,9 @@ class AccountDB:
         if row:
             return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 
                     'is_active': row['is_active'], 
-                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None}
+                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None,
+                    'password_hash': row['password_hash'] if 'password_hash' in row.keys() else None,
+                    'salt': row['salt'] if 'salt' in row.keys() else None}
         return None
 
     def find_by_address(self, address):
@@ -400,7 +428,9 @@ class AccountDB:
         if row:
             return {'id': row['id'], 'address': row['address'], 'pubkey': row['pubkey'], 
                     'is_active': row['is_active'], 
-                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None}
+                    'encrypted_key': row['encrypted_key'] if 'encrypted_key' in row.keys() else None,
+                    'password_hash': row['password_hash'] if 'password_hash' in row.keys() else None,
+                    'salt': row['salt'] if 'salt' in row.keys() else None}
         return None
 
     def set_active(self, account_id):

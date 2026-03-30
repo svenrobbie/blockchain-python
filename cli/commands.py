@@ -11,6 +11,7 @@ from lib.common import colored, cprint
 from blockchain import node, miner, account as account_module, transaction
 from blockchain import database as db_module
 from blockchain import block as block_module
+from blockchain.miner import REWARD
 from blockchain.exceptions import (
     ValidationError, DoubleSpendError, InvalidAddressError,
     InsufficientFundsError, AmountError, UTXONotFoundError,
@@ -352,7 +353,7 @@ def cmd_chain_block(args):
 
     block = chain[index]
     fees = block.get('fees_collected', 0)
-    miner_reward = 20 + fees
+    miner_reward = REWARD + fees
     
     print(colored(f"\n=== Block #{block['index']} ===", "cyan", bold=True))
     print(f"Timestamp:    {block['timestamp']} ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(block['timestamp']))})")
@@ -361,7 +362,7 @@ def cmd_chain_block(args):
     print(f"Difficulty:   {colored(str(block.get('difficulty', 5)), 'cyan')} ({block.get('difficulty', 5)} leading zeros)")
     print(f"Nonce:        {block.get('nouce', 'N/A')}")
     print(f"Fees:         {colored(str(fees), 'yellow')} coins")
-    print(f"Miner reward: {colored(str(miner_reward), 'green')} coins (20 base + {fees} fees)")
+    print(f"Miner reward: {colored(str(miner_reward), 'green')} coins ({REWARD} base + {fees} fees)")
     print(f"Transactions: {colored(str(len(block.get('tx', []))), 'green')}")
     
     for i, tx_hash in enumerate(block.get('tx', [])):

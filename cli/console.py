@@ -9,6 +9,7 @@ from lib.common import colored, cprint
 
 from blockchain import node, miner, account as account_module, transaction
 from blockchain import database as db_module
+from blockchain.miner import REWARD
 from blockchain.exceptions import (
     ValidationError, DoubleSpendError, InvalidAddressError,
     InsufficientFundsError, AmountError, UTXONotFoundError,
@@ -246,11 +247,11 @@ class Console:
             time.sleep(2)
 
     def _print_dashboard(self):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
-        txdb = database_sqlite.TransactionDB()
+        txdb = db_module.TransactionDB()
         transactions = txdb.find_all()
-        untxdb = database_sqlite.UnTransactionDB()
+        untxdb = db_module.UnTransactionDB()
         pending = untxdb.find_all()
         account = account_module.get_account()
         balance = self.get_balance(account['address']) if account else 0
@@ -313,11 +314,11 @@ class Console:
         self.dashboard_running = False
 
     def cmd_status(self, args):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
-        txdb = database_sqlite.TransactionDB()
+        txdb = db_module.TransactionDB()
         transactions = txdb.find_all()
-        untxdb = database_sqlite.UnTransactionDB()
+        untxdb = db_module.UnTransactionDB()
         pending = untxdb.find_all()
 
         account = account_module.get_account()
@@ -659,7 +660,7 @@ class Console:
             print(colored(f"\nTransaction failed: {e}", "red"))
 
     def tx_pending(self):
-        untxdb = database_sqlite.UnTransactionDB()
+        untxdb = db_module.UnTransactionDB()
         pending = untxdb.find_all()
         print(colored("\n=== Pending Transactions ===", "cyan", bold=True))
         if pending:
@@ -673,8 +674,8 @@ class Console:
             print(colored("No pending transactions", "yellow"))
 
     def tx_view(self, tx_hash):
-        txdb = database_sqlite.TransactionDB()
-        untxdb = database_sqlite.UnTransactionDB()
+        txdb = db_module.TransactionDB()
+        untxdb = db_module.UnTransactionDB()
 
         all_txs = txdb.find_all() + untxdb.find_all()
 
@@ -718,7 +719,7 @@ class Console:
             print(colored(f"Unknown chain command: {subcmd}", "red"))
 
     def chain_status(self):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
 
         print(colored("\n=== Chain Status ===", "cyan", bold=True))
@@ -738,7 +739,7 @@ class Console:
             print(f"Hash: {colored(last.get('hash', 'N/A')[:20] + '...', 'white')}")
 
     def chain_view(self, index):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
 
         if index == -1:
@@ -750,7 +751,7 @@ class Console:
 
         block = chain[index]
         fees = block.get('fees_collected', 0)
-        miner_reward = 20 + fees
+        miner_reward = REWARD + fees
         print(colored(f"\n=== Block #{block['index']} ===", "cyan", bold=True))
         print(f"Timestamp:    {block['timestamp']} ({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(block['timestamp']))})")
         print(f"Hash:         {colored(block.get('hash', 'N/A'), 'white')}")
@@ -758,13 +759,13 @@ class Console:
         print(f"Difficulty:   {colored(str(block.get('difficulty', 5)), 'cyan')} ({block.get('difficulty', 5)} leading zeros)")
         print(f"Nonce:        {block.get('nouce', 'N/A')}")
         print(f"Fees:         {colored(str(fees), 'yellow')} coins")
-        print(f"Miner reward: {colored(str(miner_reward), 'green')} coins (20 base + {fees} fees)")
+        print(f"Miner reward: {colored(str(miner_reward), 'green')} coins ({REWARD} base + {fees} fees)")
         print(f"Transactions: {colored(str(len(block.get('tx', []))), 'green')}")
         for i, tx_hash in enumerate(block.get('tx', [])):
             print(f"  {i+1}. {tx_hash[:40]}...")
 
     def chain_info(self):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
 
         if not chain:
@@ -790,7 +791,7 @@ class Console:
             print(f"Last 10 avg time:  {sum(recent_diffs) // len(recent_diffs)}s")
 
     def chain_verify(self):
-        bcdb = database_sqlite.BlockChainDB()
+        bcdb = db_module.BlockChainDB()
         chain = bcdb.find_all()
 
         print(colored("\n=== Verifying Chain ===", "cyan", bold=True))

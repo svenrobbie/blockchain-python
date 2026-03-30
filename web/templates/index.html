@@ -118,6 +118,15 @@
             }
         }
 
+        // SHA256 hash helper
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            return hashHex;
+        }
+
         // Navigation
         function navigate(page) {
             if (currentPage === page) return;
@@ -460,8 +469,11 @@
             
             const from = currentAccount.address;
             const to = document.getElementById('sendTo').value;
-            const amount = parseInt(document.getElementById('sendAmount').value);
+            const amount = parseFloat(document.getElementById('sendAmount').value);
             const password = document.getElementById('sendPassword').value;
+            
+            const salt = currentAccount.salt || '';
+            const passwordHash = await sha256(password + salt);
             
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner spinner-sm"></span> Sending...';
@@ -469,7 +481,12 @@
             const res = await api('/wallet/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ from_address: from, to_address: to, amount, password })
+                body: JSON.stringify({ 
+                    from_address: from, 
+                    to_address: to, 
+                    amount, 
+                    password_hash: passwordHash 
+                })
             });
             
             if (res.success) {
@@ -669,6 +686,10 @@
             const accounts = accountsRes.accounts || [];
             currentAccount = accounts.find(a => a.is_active) || accounts[0];
             
+            if (currentAccount && currentAccount.salt) {
+                currentAccount.salt = currentAccount.salt;
+            }
+            
             main.innerHTML = `
                 <div class="header">
                     <h1 class="page-title">Wallet</h1>
@@ -753,10 +774,16 @@
                 return;
             }
             
+            const salt = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
+            const passwordHash = await sha256(password + salt);
+            
             const res = await api('/wallet/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password })
+                body: JSON.stringify({ 
+                    password_hash: passwordHash,
+                    salt: salt
+                })
             });
             
             const alert = document.getElementById('walletAlert');

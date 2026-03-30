@@ -38,6 +38,7 @@ import argparse
 import sys
 
 from lib.common import colored
+from blockchain.config import WEB_PORT, NODE_RPC_PORT
 
 from cli.console import Console
 from cli.commands import register_commands
@@ -65,8 +66,8 @@ Examples:
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
     
     start_parser = subparsers.add_parser('start', help='Start web UI and node server')
-    start_parser.add_argument('--port', type=int, default=5001, help='Web UI port (default: 5001)')
-    start_parser.add_argument('--node-port', type=int, default=3009, help='Node RPC port (default: 3009)')
+    start_parser.add_argument('--port', type=int, default=WEB_PORT, help=f'Web UI port (default: {WEB_PORT})')
+    start_parser.add_argument('--node-port', type=int, default=NODE_RPC_PORT, help=f'Node RPC port (default: {NODE_RPC_PORT})')
     start_parser.set_defaults(func=cmd_start)
     
     console_parser = subparsers.add_parser('console', help='Start interactive console mode')
@@ -133,7 +134,7 @@ def show_menu():
         
         if choice == '1':
             print()
-            args = argparse.Namespace(port=5001, node_port=3009)
+            args = argparse.Namespace(port=WEB_PORT, node_port=NODE_RPC_PORT)
             cmd_start(args)
             break
         elif choice == '2':

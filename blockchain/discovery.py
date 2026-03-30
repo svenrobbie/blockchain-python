@@ -3,6 +3,7 @@ import socket
 import threading
 import time
 from lib.common import cprint
+from blockchain.config import DISCOVERY_PORT, VERSION, DISCOVERY_INTERVAL
 
 try:
     from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser
@@ -14,11 +15,10 @@ except ImportError:
 
 SERVICE_TYPE = "_blockchain._tcp.local."
 SERVICE_NAME = "Blockchain_Python"
-DISCOVERY_INTERVAL = 60
 
 
 class NodeDiscovery:
-    def __init__(self, port=3009, version="1.0"):
+    def __init__(self, port=DISCOVERY_PORT, version=VERSION):
         self.port = port
         self.version = version
         self.running = False
